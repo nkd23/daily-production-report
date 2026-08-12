@@ -44,7 +44,7 @@ def get_my_lines(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Line).where(Line.is_active.is_(True))
+    stmt = select(Line).where(Line.is_active == True)  # noqa: E712
     if current_user.role == UserRole.to_truong:
         stmt = stmt.where(Line.to_truong_user_id == current_user.id)
     lines = db.scalars(stmt.order_by(Line.pu_group, Line.executive_name, Line.line_number)).all()

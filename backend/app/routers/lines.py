@@ -24,7 +24,7 @@ def list_lines(
 ):
     stmt = select(Line)
     if not include_inactive:
-        stmt = stmt.where(Line.is_active.is_(True))
+        stmt = stmt.where(Line.is_active == True)  # noqa: E712
 
     if current_user.role == UserRole.to_truong:
         stmt = stmt.where(Line.to_truong_user_id == current_user.id)

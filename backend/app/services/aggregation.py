@@ -26,7 +26,7 @@ def _avg(values: list[float]) -> float | None:
 
 def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]:
     lines = db.scalars(
-        select(Line).where(Line.is_active.is_(True)).order_by(Line.pu_group, Line.executive_name, Line.line_number)
+        select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
     ).all()
     reports = db.scalars(select(DailyReport).where(DailyReport.report_date == report_date)).all()
 

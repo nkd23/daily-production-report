@@ -9,8 +9,8 @@ from sqlalchemy import (
     Integer,
     Numeric,
     SmallInteger,
-    String,
-    Text,
+    Unicode,
+    UnicodeText,
     UniqueConstraint,
     func,
 )
@@ -34,9 +34,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    full_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    username: Mapped[str] = mapped_column(Unicode(50), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(Unicode(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
@@ -48,10 +48,10 @@ class Line(Base):
     __tablename__ = "lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    line_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    executive_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
+    executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
-    buyer: Mapped[str] = mapped_column(String(100), nullable=False)
+    buyer: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
@@ -80,7 +80,7 @@ class DailyReport(Base):
     out_fin_fin: Mapped[int | None] = mapped_column(Integer, nullable=True)
     eff_fin: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     wip_fin: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    issue_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issue_note: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
     is_submitted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Manual lock flag set by Thư ký/Sếp. Only meaningful when `secretary_override`

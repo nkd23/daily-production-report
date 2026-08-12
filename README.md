@@ -3,29 +3,34 @@
 Web app thay thế quy trình tổ trưởng nhắn Zalo → thư ký nhập tay Excel. Tổ trưởng
 nhập trực tiếp, thư ký/sếp xem Dashboard và xuất Excel đúng layout gốc.
 
-- **Backend**: FastAPI (Python 3.11) + SQLAlchemy + Alembic, MySQL 8.0
+- **Backend**: FastAPI (Python 3.11) + SQLAlchemy + Alembic, **Microsoft SQL Server**
 - **Frontend**: Next.js 16 (App Router) + Tailwind CSS + Recharts
 - **Auth**: JWT, phân quyền theo role (`to_truong` / `thu_ky` / `sep`)
+
+> Đề bài gốc yêu cầu MySQL 8.0, nhưng dự án được đổi sang SQL Server vì máy dev
+> đã có sẵn SQL Server 2022 cài trước đó. Local dev dùng Windows Authentication;
+> production (Docker) dùng SQL Server 2022 Express (miễn phí bản quyền) qua SA
+> login. Toàn bộ code dùng SQLAlchemy nên nếu sau này cần đổi lại MySQL/Postgres,
+> chỉ cần đổi `DATABASE_URL` + driver, model layer không phải viết lại.
 
 ## Cấu trúc
 
 ```
 backend/     FastAPI app, Alembic migrations, seed script
 frontend/    Next.js app
-docker-compose.yml   Triển khai production (MySQL + backend + frontend + Caddy/HTTPS)
+docker-compose.yml   Triển khai production (SQL Server + backend + frontend + Caddy/HTTPS)
 Caddyfile    Reverse proxy + tự động cấp SSL Let's Encrypt
 ```
 
 ## Chạy local (development)
 
-### 1. MySQL
+### 1. SQL Server
 
-Cài MySQL 8.0, tạo database + user:
+Dùng SQL Server có sẵn trên máy (Windows Authentication, không cần tạo user riêng),
+hoặc cài SQL Server Express nếu chưa có. Tạo database:
 
 ```sql
-CREATE DATABASE duy1_production CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'duy1_user'@'localhost' IDENTIFIED BY 'duy1_password';
-GRANT ALL PRIVILEGES ON duy1_production.* TO 'duy1_user'@'localhost';
+CREATE DATABASE duy1_production;
 ```
 
 ### 2. Backend
@@ -80,7 +85,7 @@ git clone <repo-url> duy1 && cd duy1
 cp .env.example .env
 nano .env
 
-# 3. Build & chạy toàn bộ (MySQL + backend + frontend + Caddy/HTTPS)
+# 3. Build & chạy toàn bộ (SQL Server + backend + frontend + Caddy/HTTPS)
 docker compose up -d --build
 
 # 4. Tạo tài khoản/line mẫu ban đầu (chỉ chạy 1 lần)
@@ -91,6 +96,10 @@ Caddy tự động lấy chứng chỉ HTTPS Let's Encrypt cho domain trong `.en
 — chỉ cần cổng 80/443 của VPS mở và domain đã trỏ đúng IP. Sau vài giây, truy cập
 `https://<domain-của-bạn>` là dùng được.
 
+Container `db` chạy **SQL Server 2022 Express** (`MSSQL_PID=Express`, miễn phí,
+đủ cho quy mô 1 nhà máy) và khởi tạo database qua `backend/init_db.py` trước khi
+chạy migration — không cần bước tạo database thủ công.
+
 ### Cập nhật khi có code mới
 
 ```bash
@@ -98,10 +107,12 @@ git pull
 docker compose up -d --build
 ```
 
-### Backup dữ liệu MySQL
+### Backup dữ liệu SQL Server
 
 ```bash
-docker compose exec db mysqldump -u root -p"$DB_ROOT_PASSWORD" duy1_production > backup_$(date +%F).sql
+docker compose exec db /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$DB_SA_PASSWORD" -C \
+  -Q "BACKUP DATABASE duy1_production TO DISK = N'/var/opt/mssql/backup_$(date +%F).bak'"
+docker compose cp db:/var/opt/mssql/backup_$(date +%F).bak ./backup_$(date +%F).bak
 ```
 
 ## Cấu hình đáng chú ý
