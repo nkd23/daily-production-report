@@ -1,0 +1,15 @@
+# Backend (Python)
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.env
+!backend/.env.example
+
+# Editors / OS
+.DS_Store
+.vscode/
+*.log
+
+# Local scratch
+/.claude/settings.local.json

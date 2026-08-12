@@ -1,0 +1,177 @@
+from datetime import date, datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models import PuGroup, UserRole
+
+
+# ---------- Auth ----------
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserOut"
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    full_name: str
+    role: UserRole
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    password: str | None = None
+    is_active: bool | None = None
+
+
+# ---------- Lines ----------
+class LineBase(BaseModel):
+    line_number: str
+    executive_name: str
+    pu_group: PuGroup
+    buyer: str
+    sam: float
+    target_output: int
+    target_eff: float
+    to_truong_user_id: int | None = None
+    is_active: bool = True
+    display_order: int = 0
+
+
+class LineCreate(LineBase):
+    pass
+
+
+class LineUpdate(BaseModel):
+    line_number: str | None = None
+    executive_name: str | None = None
+    pu_group: PuGroup | None = None
+    buyer: str | None = None
+    sam: float | None = None
+    target_output: int | None = None
+    target_eff: float | None = None
+    to_truong_user_id: int | None = None
+    is_active: bool | None = None
+    display_order: int | None = None
+
+
+class LineOut(LineBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    to_truong_name: str | None = None
+
+
+# ---------- Daily reports ----------
+class DailyReportInput(BaseModel):
+    shift: int = Field(ge=1, le=2)
+    out_sew: int | None = Field(default=None, ge=0)
+    eff_sew: float | None = Field(default=None, ge=0)
+    out_fin_scanpack: int | None = Field(default=None, ge=0)
+    out_fin_fin: int | None = Field(default=None, ge=0)
+    eff_fin: float | None = Field(default=None, ge=0)
+    wip_fin: int | None = Field(default=None, ge=0)
+    issue_note: str | None = None
+
+
+class DailyReportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    line_id: int
+    report_date: date
+    shift: int
+    out_sew: int | None
+    eff_sew: float | None
+    out_fin_scanpack: int | None
+    out_fin_fin: int | None
+    eff_fin: float | None
+    wip_fin: int | None
+    issue_note: str | None
+    is_submitted: bool
+    is_locked: bool
+    submitted_at: datetime | None
+    var: int | None = None
+
+
+class LineWithReportOut(BaseModel):
+    line: LineOut
+    report: DailyReportOut | None
+    is_editable: bool
+
+
+class UnlockRequest(BaseModel):
+    is_locked: bool
+
+
+# ---------- Aggregated / dashboard ----------
+class LineDaySummary(BaseModel):
+    line_id: int
+    line_number: str
+    executive_name: str
+    pu_group: PuGroup
+    buyer: str
+    sam: float
+    target_output: int
+    target_eff: float
+    shift_display: str
+    out_sew: int | None
+    eff_sew: float | None
+    out_fin_scanpack: int | None
+    out_fin_fin: int | None
+    eff_fin: float | None
+    var: int | None
+    wip_fin: int | None
+    issue_note: str | None
+    is_submitted: bool
+    is_locked: bool
+
+
+class ExecutiveSummary(BaseModel):
+    executive_name: str
+    pu_group: PuGroup
+    target_output: int
+    out_fin_fin: int
+    eff_fin_avg: float | None
+    eff_sew_avg: float | None
+    var: int
+
+
+class KpiSummary(BaseModel):
+    total_target_output: int
+    total_actual_output: int
+    completion_rate: float | None
+    avg_eff_sew: float | None
+    avg_eff_fin: float | None
+    total_wip: int
+    lines_with_issue: int
+    lines_submitted: int
+    lines_total: int
+
+
+class IssueItem(BaseModel):
+    line_number: str
+    buyer: str
+    executive_name: str
+    issue_note: str
+
+
+class DashboardResponse(BaseModel):
+    report_date: date
+    kpi: KpiSummary
+    lines: list[LineDaySummary]
+    executives: list[ExecutiveSummary]
+    issues: list[IssueItem]
