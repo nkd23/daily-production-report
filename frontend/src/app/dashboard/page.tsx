@@ -54,6 +54,35 @@ function execColor(name: string) {
   return EXEC_COLORS[name] ?? FALLBACK_COLOR;
 }
 
+interface LineChartRow {
+  name: string;
+  executive: string;
+  Target: number;
+  "Thực tế": number;
+}
+
+function LineChartTooltip({ active, label, payload }: { active?: boolean; label?: string; payload?: { payload: LineChartRow }[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0].payload;
+  const colors = execColor(row.executive);
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3 text-sm shadow-lg">
+      <p className="font-semibold text-foreground">{label}</p>
+      <p className="mb-2 text-xs text-muted">{row.executive}</p>
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.light }} />
+        <span className="text-muted">Target:</span>
+        <span className="font-medium text-foreground">{row.Target.toLocaleString("vi-VN")}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.solid }} />
+        <span className="text-muted">Thực tế:</span>
+        <span className="font-medium text-foreground">{row["Thực tế"].toLocaleString("vi-VN")}</span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent() {
   const [reportDate, setReportDate] = useState(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -171,7 +200,7 @@ function DashboardContent() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "#f1f5f9" }} />
+                  <Tooltip content={<LineChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
                   <Bar dataKey="Target" radius={[4, 4, 0, 0]} maxBarSize={36}>
                     {lineChartData.map((entry, idx) => (
                       <Cell key={idx} fill={execColor(entry.executive).light} />
