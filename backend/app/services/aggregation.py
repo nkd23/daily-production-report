@@ -24,6 +24,27 @@ def _avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2)
 
 
+def _weighted_eff(pairs: list[tuple[float | None, float | None]]) -> float | None:
+    """Pooled efficiency = total output / total implied-standard output.
+
+    A line's EFF% is output / capacity, so capacity = output / eff%.
+    Combining lines by averaging their EFF% outright would let a tiny line
+    count as much as a big one; weighting by output instead (this is how the
+    factory computes the Executive/PU/TTL rows on the real report) keeps
+    big lines dominating the group total the way they should.
+    """
+    total_output = 0.0
+    total_capacity = 0.0
+    for output, eff in pairs:
+        if not output or not eff:
+            continue
+        total_output += output
+        total_capacity += output / (eff / 100)
+    if not total_capacity:
+        return None
+    return round(total_output / total_capacity * 100, 2)
+
+
 def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]:
     lines = db.scalars(
         select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
@@ -43,8 +64,8 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         out_fin = sum((r.out_fin_fin or 0) for r in line_reports) if line_reports else None
         wip_values = [r.wip_fin for r in line_reports if r.wip_fin is not None]
         wip_fin = wip_values[-1] if wip_values else None
-        eff_sew = _avg([float(r.eff_sew) for r in line_reports if r.eff_sew is not None])
-        eff_fin = _avg([float(r.eff_fin) for r in line_reports if r.eff_fin is not None])
+        eff_sew = _weighted_eff([(r.out_sew, float(r.eff_sew) if r.eff_sew is not None else None) for r in line_reports])
+        eff_fin = _weighted_eff([(r.out_fin_fin, float(r.eff_fin) if r.eff_fin is not None else None) for r in line_reports])
         issue_notes = [r.issue_note for r in line_reports if r.issue_note]
         issue_note = " | ".join(issue_notes) if issue_notes else None
         shift_display = "+".join(str(r.shift) for r in line_reports) if line_reports else "-"
@@ -105,8 +126,8 @@ def build_executive_summaries(lines: list[LineDaySummary]) -> list[ExecutiveSumm
                 pu_group=pu_group,
                 target_output=sum(i.target_output for i in items),
                 out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
-                eff_fin_avg=_avg([i.eff_fin for i in items if i.eff_fin is not None]),
-                eff_sew_avg=_avg([i.eff_sew for i in items if i.eff_sew is not None]),
+                eff_fin_avg=_weighted_eff([(i.out_fin_fin, i.eff_fin) for i in items]),
+                eff_sew_avg=_weighted_eff([(i.out_sew, i.eff_sew) for i in items]),
                 var=sum((i.var or 0) for i in items),
             )
         )
@@ -122,10 +143,10 @@ def _build_group_summary(label: str, level: str, items: list[LineDaySummary]) ->
         sam_avg=_avg([i.sam for i in items]),
         line_count=len(items),
         out_sew=sum((i.out_sew or 0) for i in items),
-        eff_sew_avg=_avg([i.eff_sew for i in items if i.eff_sew is not None]),
+        eff_sew_avg=_weighted_eff([(i.out_sew, i.eff_sew) for i in items]),
         out_fin_scanpack=sum((i.out_fin_scanpack or 0) for i in items),
         out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
-        eff_fin_avg=_avg([i.eff_fin for i in items if i.eff_fin is not None]),
+        eff_fin_avg=_weighted_eff([(i.out_fin_fin, i.eff_fin) for i in items]),
         var=sum((i.var or 0) for i in items),
         wip_fin=sum((i.wip_fin or 0) for i in items),
     )
@@ -162,8 +183,8 @@ def build_kpi_summary(lines: list[LineDaySummary]) -> KpiSummary:
         total_target_output=total_target,
         total_actual_output=total_actual,
         completion_rate=round(total_actual / total_target * 100, 1) if total_target else None,
-        avg_eff_sew=_avg([l.eff_sew for l in lines if l.eff_sew is not None]),
-        avg_eff_fin=_avg([l.eff_fin for l in lines if l.eff_fin is not None]),
+        avg_eff_sew=_weighted_eff([(l.out_sew, l.eff_sew) for l in lines]),
+        avg_eff_fin=_weighted_eff([(l.out_fin_fin, l.eff_fin) for l in lines]),
         total_wip=sum((l.wip_fin or 0) for l in lines),
         lines_with_issue=sum(1 for l in lines if l.issue_note),
         lines_submitted=sum(1 for l in lines if l.is_submitted),

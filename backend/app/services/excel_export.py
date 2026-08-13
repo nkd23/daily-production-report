@@ -57,6 +57,23 @@ def _avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
 
 
+def _weighted_eff(pairs: list[tuple[float | None, float | None]]) -> float | None:
+    """Pooled efficiency = total output / total implied-standard output.
+    Matches app.services.aggregation._weighted_eff - keep in sync. Averaging
+    EFF% outright would let a tiny line count as much as a big one; this is
+    how the factory computes the Executive/PU/TTL subtotal rows."""
+    total_output = 0.0
+    total_capacity = 0.0
+    for output, eff in pairs:
+        if not output or not eff:
+            continue
+        total_output += output
+        total_capacity += output / (eff / 100)
+    if not total_capacity:
+        return None
+    return round(total_output / total_capacity * 100, 2)
+
+
 def _eff_fill(actual: float | None, target: float | None):
     if actual is None or not target:
         return None
@@ -129,10 +146,10 @@ def _subtotal_row_values(label: str, items: list[LineDaySummary]) -> list:
         "",
         "",
         sum((i.out_sew or 0) for i in items),
-        _avg([float(i.eff_sew) for i in items if i.eff_sew is not None]),
+        _weighted_eff([(i.out_sew, float(i.eff_sew) if i.eff_sew is not None else None) for i in items]),
         sum((i.out_fin_scanpack or 0) for i in items),
         sum((i.out_fin_fin or 0) for i in items),
-        _avg([float(i.eff_fin) for i in items if i.eff_fin is not None]),
+        _weighted_eff([(i.out_fin_fin, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
         sum((i.var or 0) for i in items),
         sum((i.wip_fin or 0) for i in items),
         "",
