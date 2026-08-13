@@ -6,6 +6,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -123,6 +126,28 @@ function ExecChartTooltip({ active, payload }: { active?: boolean; payload?: { p
   );
 }
 
+interface PieChartRow {
+  name: string;
+  value: number;
+}
+
+function ExecPieTooltip({ active, payload }: { active?: boolean; payload?: { payload: PieChartRow }[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0].payload;
+  const colors = execColor(row.name);
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3 text-sm shadow-lg">
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.solid }} />
+        <span className="font-semibold text-foreground">{row.name}</span>
+      </div>
+      <p className="mt-1 text-muted">
+        Thực tế: <span className="font-medium text-foreground">{row.value.toLocaleString("vi-VN")}</span>
+      </p>
+    </div>
+  );
+}
+
 function DashboardContent() {
   const [reportDate, setReportDate] = useState(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -170,6 +195,14 @@ function DashboardContent() {
         Target: e.target_output,
         "Thực tế": e.out_fin_fin,
       })) ?? [];
+
+  const pieDataMap = new Map<string, number>();
+  (data?.executives ?? []).forEach((e) => {
+    if (e.out_fin_fin > 0) {
+      pieDataMap.set(e.executive_name, (pieDataMap.get(e.executive_name) ?? 0) + e.out_fin_fin);
+    }
+  });
+  const pieData: PieChartRow[] = [...pieDataMap.entries()].map(([name, value]) => ({ name, value }));
 
   return (
     <PageShell
@@ -243,12 +276,12 @@ function DashboardContent() {
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip content={<LineChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
-                  <Bar dataKey="Target" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                  <Bar dataKey="Target" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false}>
                     {lineChartData.map((entry, idx) => (
                       <Cell key={idx} fill={execColor(entry.executive).light} />
                     ))}
                   </Bar>
-                  <Bar dataKey="Thực tế" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                  <Bar dataKey="Thực tế" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false}>
                     {lineChartData.map((entry, idx) => (
                       <Cell key={idx} fill={execColor(entry.executive).solid} />
                     ))}
@@ -258,27 +291,66 @@ function DashboardContent() {
             )}
           </Card>
 
-          <Card className="p-5">
-            <h2 className="mb-4 text-sm font-semibold text-foreground">Tổng hợp theo Executive / PU</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
-                <Tooltip content={<ExecChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
-                <Bar dataKey="Target" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                  {execChartData.map((entry, idx) => (
-                    <Cell key={idx} fill={execColor(entry.executive).light} />
-                  ))}
-                </Bar>
-                <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                  {execChartData.map((entry, idx) => (
-                    <Cell key={idx} fill={execColor(entry.executive).solid} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="p-5">
+              <h2 className="mb-4 text-sm font-semibold text-foreground">Tổng hợp theo Executive / PU</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
+                  <Tooltip content={<ExecChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
+                  <Bar dataKey="Target" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
+                    {execChartData.map((entry, idx) => (
+                      <Cell key={idx} fill={execColor(entry.executive).light} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
+                    {execChartData.map((entry, idx) => (
+                      <Cell key={idx} fill={execColor(entry.executive).solid} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
+            <Card className="p-5">
+              <h2 className="mb-4 text-sm font-semibold text-foreground">Tỷ trọng Output thực tế theo Executive</h2>
+              {pieData.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted">Chưa có line nào nộp báo cáo ngày này.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      isAnimationActive={false}
+                      label={(entry: { name?: string; percent?: number }) =>
+                        `${entry.name}: ${entry.percent ? Math.round(entry.percent * 100) : 0}%`
+                      }
+                      labelLine={false}
+                    >
+                      {pieData.map((entry, idx) => (
+                        <Cell key={idx} fill={execColor(entry.name).solid} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<ExecPieTooltip />} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value) => <span className="text-xs text-foreground">{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+          </div>
 
           <Card className="overflow-hidden p-0">
             <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">
