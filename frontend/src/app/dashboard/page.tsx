@@ -149,12 +149,14 @@ function DashboardContent() {
   const lineChartExecs = [...new Set(lineChartData.map((d) => d.executive))];
 
   const execChartData =
-    data?.executives.map((e) => ({
-      name: `${e.executive_name} (${e.pu_group})`,
-      executive: e.executive_name,
-      Target: e.target_output,
-      "Thực tế": e.out_fin_fin,
-    })) ?? [];
+    data?.executives
+      .filter((e) => e.target_output > 0 || e.out_fin_fin > 0)
+      .map((e) => ({
+        name: `${e.executive_name} (${e.pu_group})`,
+        executive: e.executive_name,
+        Target: e.target_output,
+        "Thực tế": e.out_fin_fin,
+      })) ?? [];
 
   return (
     <PageShell
