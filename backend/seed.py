@@ -19,15 +19,16 @@ from app.security import hash_password
 DEFAULT_PASSWORD = "Totruong@2026"
 
 # line_number -> executive_name (report grouping label, not a login account)
+# NOTE: trimmed to only the lines that currently appear in the factory's daily
+# report (33 lines) - the rest were placeholder/test lines not in use yet.
 LINES = [
-    ("01AB", "Ms Thảo"),
-    ("02AB", "Ms Thảo"),
     ("03AB", "Ms Thảo"),
     ("04AB", "Ms Thảo"),
     ("05AB", "Ms Thảo"),
     ("06AB", "Ms Thảo"),
     ("07AB", "Ms Thảo"),
     ("08AB", "Ms Hương"),
+    ("18AB", "Ms Thảo"),
     ("09AB", "Ms Hương"),
     ("10AB", "Ms Hương"),
     ("11AB", "Ms Hương"),
@@ -37,10 +38,6 @@ LINES = [
     ("15AB", "Ms Hương"),
     ("16AB", "Ms Hương"),
     ("17AB", "Ms Hương"),
-    ("18AB", "Ms Thảo"),
-    ("19AB", "Ms Thảo"),
-    ("20AB", "Ms Doan"),
-    ("21AB", "Ms Doan"),
     ("23AB", "Ms Doan"),
     ("24AB", "Ms Doan"),
     ("25AB", "Ms Doan"),
@@ -58,13 +55,6 @@ LINES = [
     ("37AB", "Ms Phương"),
     ("38AB", "Ms Phương"),
     ("39AB", "Ms Phương"),
-    ("40AB", "Ms Phương"),
-    ("41AB", "Ms Hương"),
-    ("42AB", "Ms Hương"),
-    ("43AB", "Ms Huệ"),
-    ("44AB", "Ms Thảo"),
-    ("45AB", "Ms Phương"),
-    ("47AB", "Ms Doan"),
 ]
 
 
