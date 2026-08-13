@@ -98,10 +98,13 @@ NUMBER_FORMATS = {
 
 
 def _line_row_values(line: LineDaySummary) -> list:
+    # 0 means the line hasn't been given a real NEW OUT-TAR/NEW EFF-TAR yet
+    # (management supplies these weekly, on Mondays) - leave the cell blank
+    # rather than showing a misleading "0".
     return [
         line.line_number,
-        line.target_output,
-        float(line.target_eff),
+        line.target_output or None,
+        float(line.target_eff) if line.target_eff else None,
         line.buyer,
         float(line.sam),
         line.shift_display,
@@ -117,10 +120,11 @@ def _line_row_values(line: LineDaySummary) -> list:
 
 
 def _subtotal_row_values(label: str, items: list[LineDaySummary]) -> list:
+    target_output_sum = sum(i.target_output for i in items)
     return [
         label,
-        sum(i.target_output for i in items),
-        _avg([float(i.target_eff) for i in items]),
+        target_output_sum or None,
+        _avg([float(i.target_eff) for i in items if i.target_eff]),
         "",
         "",
         "",

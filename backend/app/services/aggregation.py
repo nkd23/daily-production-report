@@ -60,7 +60,10 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         else:
             is_locked = resolve_effective_lock(report_date, False, False)
 
-        var = (out_fin - line.target_output) if out_fin is not None else None
+        # target_output == 0 means the line hasn't been configured with a real
+        # target yet (management supplies NEW OUT-TAR/NEW EFF-TAR weekly, on
+        # Mondays) - skip the comparison rather than showing a bogus VAR.
+        var = (out_fin - line.target_output) if out_fin is not None and line.target_output else None
 
         summaries.append(
             LineDaySummary(
@@ -115,7 +118,7 @@ def _build_group_summary(label: str, level: str, items: list[LineDaySummary]) ->
         label=label,
         level=level,
         target_output=sum(i.target_output for i in items),
-        target_eff_avg=_avg([i.target_eff for i in items]),
+        target_eff_avg=_avg([i.target_eff for i in items if i.target_eff]),
         sam_avg=_avg([i.sam for i in items]),
         line_count=len(items),
         out_sew=sum((i.out_sew or 0) for i in items),

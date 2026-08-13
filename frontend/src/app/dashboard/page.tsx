@@ -324,7 +324,7 @@ function DashboardContent() {
                           {row.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right">{row.target_output.toLocaleString("vi-VN")}</td>
+                      <td className="px-4 py-2 text-right">{row.target_output ? row.target_output.toLocaleString("vi-VN") : "-"}</td>
                       <td className="px-4 py-2 text-right">{row.target_eff_avg !== null ? `${row.target_eff_avg}%` : "-"}</td>
                       <td className="px-4 py-2 text-right">{row.sam_avg ?? "-"}</td>
                       <td className="px-4 py-2 text-right">{row.out_sew.toLocaleString("vi-VN")}</td>

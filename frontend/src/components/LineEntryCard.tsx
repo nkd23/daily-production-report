@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Pencil, Send, X } from "lucide-react";
 import { Badge, Button, Input, Label, Textarea } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { DailyReportInput, LineWithReport } from "@/lib/types";
@@ -44,6 +44,47 @@ export function LineEntryCard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+
+  const [editingTargets, setEditingTargets] = useState(false);
+  const [targetForm, setTargetForm] = useState({
+    sam: String(line.sam || ""),
+    target_output: String(line.target_output || ""),
+    target_eff: String(line.target_eff || ""),
+  });
+  const [targetSaving, setTargetSaving] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
+
+  function openTargetEdit() {
+    setTargetForm({
+      sam: String(line.sam || ""),
+      target_output: String(line.target_output || ""),
+      target_eff: String(line.target_eff || ""),
+    });
+    setTargetError(null);
+    setEditingTargets(true);
+  }
+
+  async function handleSaveTargets(e: React.FormEvent) {
+    e.preventDefault();
+    const sam = Number(targetForm.sam);
+    const target_output = Number(targetForm.target_output);
+    const target_eff = Number(targetForm.target_eff);
+    if (!sam || !target_output || !target_eff) {
+      setTargetError("Vui lòng nhập đủ SAM, Target sản lượng và Target hiệu suất");
+      return;
+    }
+    setTargetSaving(true);
+    setTargetError(null);
+    try {
+      await api.updateLineTargets(line.id, { sam, target_output, target_eff });
+      setEditingTargets(false);
+      onSubmitted();
+    } catch (err) {
+      setTargetError(err instanceof ApiError ? err.message : "Có lỗi xảy ra, vui lòng thử lại");
+    } finally {
+      setTargetSaving(false);
+    }
+  }
 
   useEffect(() => {
     setForm(
@@ -92,9 +133,63 @@ export function LineEntryCard({
             <Badge tone="primary">{line.pu_group}</Badge>
             <span className="text-sm text-muted">{line.executive_name}</span>
           </div>
-          <p className="mt-0.5 text-sm text-muted">
-            SAM {line.sam} · Target {line.target_output.toLocaleString("vi-VN")} sp · Target EFF {line.target_eff}%
-          </p>
+          {editingTargets ? (
+            <form onSubmit={handleSaveTargets} className="mt-2 flex flex-wrap items-end gap-2">
+              <div>
+                <Label>SAM</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  className="w-24"
+                  value={targetForm.sam}
+                  onChange={(e) => setTargetForm({ ...targetForm, sam: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Target sản lượng</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="w-28"
+                  value={targetForm.target_output}
+                  onChange={(e) => setTargetForm({ ...targetForm, target_output: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Target hiệu suất (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  className="w-24"
+                  value={targetForm.target_eff}
+                  onChange={(e) => setTargetForm({ ...targetForm, target_eff: e.target.value })}
+                />
+              </div>
+              <Button type="submit" size="sm" disabled={targetSaving}>
+                {targetSaving ? "Đang lưu..." : "Lưu"}
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setEditingTargets(false)}>
+                <X size={14} />
+              </Button>
+              {targetError ? <p className="w-full text-xs text-danger">{targetError}</p> : null}
+            </form>
+          ) : (
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
+              SAM {line.sam}
+              {line.target_output > 0 ? ` · Target ${line.target_output.toLocaleString("vi-VN")} sp` : ""}
+              {line.target_eff > 0 ? ` · Target EFF ${line.target_eff}%` : ""}
+              <button
+                type="button"
+                onClick={openTargetEdit}
+                className="text-muted transition-colors hover:text-foreground"
+                title="Cập nhật SAM / Target (theo họp với Sếp)"
+              >
+                <Pencil size={12} />
+              </button>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {locked ? (

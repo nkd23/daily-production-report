@@ -74,6 +74,15 @@ class LineOut(LineBase):
     to_truong_name: str | None = None
 
 
+class LineTargetUpdate(BaseModel):
+    """SAM / NEW OUT-TAR / NEW EFF-TAR, updated by whoever just came out of the
+    weekly meeting with Sếp (Thư ký, Sếp, or the Tổ trưởng of that line)."""
+
+    sam: float = Field(gt=0)
+    target_output: int = Field(gt=0)
+    target_eff: float = Field(gt=0)
+
+
 # ---------- Daily reports ----------
 class DailyReportInput(BaseModel):
     shift: int = Field(ge=1, le=2)

@@ -79,6 +79,8 @@ export const api = {
   updateLine: (id: number, payload: Partial<Omit<Line, "id" | "to_truong_name">>) =>
     request<Line>(`/api/lines/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deactivateLine: (id: number) => request<void>(`/api/lines/${id}`, { method: "DELETE" }),
+  updateLineTargets: (id: number, payload: { sam: number; target_output: number; target_eff: number }) =>
+    request<Line>(`/api/lines/${id}/targets`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   myLines: (reportDate: string, shift: number) =>
     request<LineWithReport[]>(`/api/reports/my-lines?report_date=${reportDate}&shift=${shift}`),

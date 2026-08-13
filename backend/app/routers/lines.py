@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, require_thu_ky_or_sep
 from app.models import Line, User, UserRole
-from app.schemas import LineCreate, LineOut, LineUpdate
+from app.schemas import LineCreate, LineOut, LineTargetUpdate, LineUpdate
 
 router = APIRouter(prefix="/api/lines", tags=["lines"])
 
@@ -53,6 +53,31 @@ def update_line(line_id: int, payload: LineUpdate, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy line")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(line, field, value)
+    db.commit()
+    db.refresh(line)
+    return _to_line_out(line)
+
+
+@router.patch("/{line_id}/targets", response_model=LineOut)
+def update_line_targets(
+    line_id: int,
+    payload: LineTargetUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Let a line's own Tổ trưởng (in addition to Thư ký/Sếp) update SAM /
+    NEW OUT-TAR / NEW EFF-TAR themselves - these come from the weekly meeting
+    with Sếp, so the Tổ trưởng usually knows them before anyone re-types them
+    into "Cấu hình Line"."""
+    line = db.get(Line, line_id)
+    if line is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy line")
+    if current_user.role == UserRole.to_truong and line.to_truong_user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không phụ trách line này")
+
+    line.sam = payload.sam
+    line.target_output = payload.target_output
+    line.target_eff = payload.target_eff
     db.commit()
     db.refresh(line)
     return _to_line_out(line)
