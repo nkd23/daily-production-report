@@ -158,6 +158,25 @@ class ExecutiveSummary(BaseModel):
     var: int
 
 
+class GroupSummary(BaseModel):
+    """One row of the Executive / PU / TTL summary table - mirrors the
+    subtotal rows in the original Excel report layout."""
+
+    label: str
+    level: str  # "executive" | "pu" | "ttl"
+    target_output: int
+    target_eff_avg: float | None
+    sam_avg: float | None
+    line_count: int
+    out_sew: int
+    eff_sew_avg: float | None
+    out_fin_scanpack: int
+    out_fin_fin: int
+    eff_fin_avg: float | None
+    var: int
+    wip_fin: int
+
+
 class KpiSummary(BaseModel):
     total_target_output: int
     total_actual_output: int
@@ -182,4 +201,5 @@ class DashboardResponse(BaseModel):
     kpi: KpiSummary
     lines: list[LineDaySummary]
     executives: list[ExecutiveSummary]
+    summary_table: list[GroupSummary]
     issues: list[IssueItem]

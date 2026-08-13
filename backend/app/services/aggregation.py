@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import resolve_effective_lock
 from app.models import DailyReport, Line
-from app.schemas import DashboardResponse, ExecutiveSummary, IssueItem, KpiSummary, LineDaySummary
+from app.schemas import DashboardResponse, ExecutiveSummary, GroupSummary, IssueItem, KpiSummary, LineDaySummary
 
 
 def _avg(values: list[float]) -> float | None:
@@ -110,6 +110,48 @@ def build_executive_summaries(lines: list[LineDaySummary]) -> list[ExecutiveSumm
     return result
 
 
+def _build_group_summary(label: str, level: str, items: list[LineDaySummary]) -> GroupSummary:
+    return GroupSummary(
+        label=label,
+        level=level,
+        target_output=sum(i.target_output for i in items),
+        target_eff_avg=_avg([i.target_eff for i in items]),
+        sam_avg=_avg([i.sam for i in items]),
+        line_count=len(items),
+        out_sew=sum((i.out_sew or 0) for i in items),
+        eff_sew_avg=_avg([i.eff_sew for i in items if i.eff_sew is not None]),
+        out_fin_scanpack=sum((i.out_fin_scanpack or 0) for i in items),
+        out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
+        eff_fin_avg=_avg([i.eff_fin for i in items if i.eff_fin is not None]),
+        var=sum((i.var or 0) for i in items),
+        wip_fin=sum((i.wip_fin or 0) for i in items),
+    )
+
+
+def build_summary_table(lines: list[LineDaySummary]) -> list[GroupSummary]:
+    """Executive -> PU subtotal -> TTL rows, in the same reading order as the
+    Excel export, built only from lines that have actually submitted data."""
+    submitted = [l for l in lines if l.is_submitted]
+
+    lines_by_pu: dict[str, list[LineDaySummary]] = {}
+    for l in submitted:
+        lines_by_pu.setdefault(l.pu_group.value, []).append(l)
+
+    result: list[GroupSummary] = []
+    for pu in sorted(lines_by_pu.keys()):
+        pu_lines = lines_by_pu[pu]
+        lines_by_exec: dict[str, list[LineDaySummary]] = {}
+        for l in pu_lines:
+            lines_by_exec.setdefault(l.executive_name, []).append(l)
+        for executive_name, exec_lines in lines_by_exec.items():
+            result.append(_build_group_summary(executive_name, "executive", exec_lines))
+        result.append(_build_group_summary(f"{pu} - TTL", "pu", pu_lines))
+
+    if submitted:
+        result.append(_build_group_summary("TTL", "ttl", submitted))
+    return result
+
+
 def build_kpi_summary(lines: list[LineDaySummary]) -> KpiSummary:
     total_target = sum(l.target_output for l in lines)
     total_actual = sum((l.out_fin_fin or 0) for l in lines)
@@ -141,5 +183,6 @@ def build_dashboard(db: Session, report_date: date) -> DashboardResponse:
         kpi=build_kpi_summary(lines),
         lines=lines,
         executives=build_executive_summaries(lines),
+        summary_table=build_summary_table(lines),
         issues=build_issue_list(lines),
     )

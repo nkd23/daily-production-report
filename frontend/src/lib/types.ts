@@ -92,6 +92,22 @@ export interface ExecutiveSummary {
   var: number;
 }
 
+export interface GroupSummary {
+  label: string;
+  level: "executive" | "pu" | "ttl";
+  target_output: number;
+  target_eff_avg: number | null;
+  sam_avg: number | null;
+  line_count: number;
+  out_sew: number;
+  eff_sew_avg: number | null;
+  out_fin_scanpack: number;
+  out_fin_fin: number;
+  eff_fin_avg: number | null;
+  var: number;
+  wip_fin: number;
+}
+
 export interface KpiSummary {
   total_target_output: number;
   total_actual_output: number;
@@ -116,5 +132,6 @@ export interface DashboardResponse {
   kpi: KpiSummary;
   lines: LineDaySummary[];
   executives: ExecutiveSummary[];
+  summary_table: GroupSummary[];
   issues: IssueItem[];
 }

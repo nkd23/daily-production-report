@@ -53,6 +53,19 @@ function execColor(name: string) {
   return EXEC_COLORS[name] ?? FALLBACK_COLOR;
 }
 
+// Mirrors EFF_WARNING_THRESHOLD / EFF_CRITICAL_THRESHOLD in
+// backend/app/services/excel_export.py - keep in sync. Not yet confirmed
+// with the factory, adjust both places together if the real cutoffs change.
+const EFF_WARNING_THRESHOLD = 0.75;
+const EFF_CRITICAL_THRESHOLD = 0.6;
+function effCellClass(actual: number | null, target: number | null, level: string) {
+  if (level !== "executive" || actual === null || !target) return "";
+  const ratio = actual / target;
+  if (ratio < EFF_CRITICAL_THRESHOLD) return "bg-danger-soft text-danger font-semibold";
+  if (ratio < EFF_WARNING_THRESHOLD) return "bg-warning-soft text-warning font-semibold";
+  return "";
+}
+
 interface LineChartRow {
   name: string;
   executive: string;
@@ -265,6 +278,80 @@ function DashboardContent() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </Card>
+
+          <Card className="overflow-hidden p-0">
+            <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">
+              Bảng tổng hợp Executive / PU / TTL
+            </h2>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                    <th className="px-4 py-2 font-medium">Executive / PU</th>
+                    <th className="px-4 py-2 text-right font-medium">Target OUT</th>
+                    <th className="px-4 py-2 text-right font-medium">Target EFF</th>
+                    <th className="px-4 py-2 text-right font-medium">SAM</th>
+                    <th className="px-4 py-2 text-right font-medium">OUT-SEW</th>
+                    <th className="px-4 py-2 text-right font-medium">EFF-SEW</th>
+                    <th className="px-4 py-2 text-right font-medium">OUT-FIN (Scan)</th>
+                    <th className="px-4 py-2 text-right font-medium">OUT-FIN (Fin)</th>
+                    <th className="px-4 py-2 text-right font-medium">EFF-FIN</th>
+                    <th className="px-4 py-2 text-right font-medium">VAR</th>
+                    <th className="px-4 py-2 text-right font-medium">WIP FIN</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.summary_table ?? []).map((row, idx) => (
+                    <tr
+                      key={idx}
+                      className={
+                        row.level === "ttl"
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : row.level === "pu"
+                            ? "border-b border-border bg-surface-muted font-semibold"
+                            : "border-b border-border"
+                      }
+                    >
+                      <td className="px-4 py-2">
+                        <span className="flex items-center gap-2">
+                          {row.level === "executive" ? (
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: execColor(row.label).solid }}
+                            />
+                          ) : null}
+                          {row.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">{row.target_output.toLocaleString("vi-VN")}</td>
+                      <td className="px-4 py-2 text-right">{row.target_eff_avg !== null ? `${row.target_eff_avg}%` : "-"}</td>
+                      <td className="px-4 py-2 text-right">{row.sam_avg ?? "-"}</td>
+                      <td className="px-4 py-2 text-right">{row.out_sew.toLocaleString("vi-VN")}</td>
+                      <td className={`px-4 py-2 text-right ${effCellClass(row.eff_sew_avg, row.target_eff_avg, row.level)}`}>
+                        {row.eff_sew_avg !== null ? `${row.eff_sew_avg}%` : "-"}
+                      </td>
+                      <td className="px-4 py-2 text-right">{row.out_fin_scanpack.toLocaleString("vi-VN")}</td>
+                      <td className="px-4 py-2 text-right">{row.out_fin_fin.toLocaleString("vi-VN")}</td>
+                      <td className={`px-4 py-2 text-right ${effCellClass(row.eff_fin_avg, row.target_eff_avg, row.level)}`}>
+                        {row.eff_fin_avg !== null ? `${row.eff_fin_avg}%` : "-"}
+                      </td>
+                      <td className={`px-4 py-2 text-right ${row.var < 0 && row.level === "executive" ? "text-danger font-semibold" : ""}`}>
+                        {row.var.toLocaleString("vi-VN")}
+                      </td>
+                      <td className="px-4 py-2 text-right">{row.wip_fin.toLocaleString("vi-VN")}</td>
+                    </tr>
+                  ))}
+                  {!data.summary_table || data.summary_table.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-8 text-center text-sm text-muted">
+                        Chưa có line nào nộp báo cáo ngày này.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </Card>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
