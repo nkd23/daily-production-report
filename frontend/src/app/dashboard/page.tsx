@@ -6,7 +6,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -83,6 +82,34 @@ function LineChartTooltip({ active, label, payload }: { active?: boolean; label?
   );
 }
 
+interface ExecChartRow {
+  name: string;
+  executive: string;
+  Target: number;
+  "Thực tế": number;
+}
+
+function ExecChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: ExecChartRow }[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0].payload;
+  const colors = execColor(row.executive);
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3 text-sm shadow-lg">
+      <p className="mb-2 font-semibold text-foreground">{row.name}</p>
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.light }} />
+        <span className="text-muted">Target:</span>
+        <span className="font-medium text-foreground">{row.Target.toLocaleString("vi-VN")}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.solid }} />
+        <span className="text-muted">Thực tế:</span>
+        <span className="font-medium text-foreground">{row["Thực tế"].toLocaleString("vi-VN")}</span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardContent() {
   const [reportDate, setReportDate] = useState(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -124,9 +151,9 @@ function DashboardContent() {
   const execChartData =
     data?.executives.map((e) => ({
       name: `${e.executive_name} (${e.pu_group})`,
+      executive: e.executive_name,
       Target: e.target_output,
       "Thực tế": e.out_fin_fin,
-      negative: e.var < 0,
     })) ?? [];
 
   return (
@@ -223,12 +250,15 @@ function DashboardContent() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
-                <Tooltip cursor={{ fill: "#f1f5f9" }} />
-                <Legend />
-                <Bar dataKey="Target" fill="#cbd5e1" radius={[0, 4, 4, 0]} maxBarSize={22} />
+                <Tooltip content={<ExecChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
+                <Bar dataKey="Target" radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {execChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={execColor(entry.executive).light} />
+                  ))}
+                </Bar>
                 <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22}>
                   {execChartData.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.negative ? "#dc2626" : "#16a34a"} />
+                    <Cell key={idx} fill={execColor(entry.executive).solid} />
                   ))}
                 </Bar>
               </BarChart>
