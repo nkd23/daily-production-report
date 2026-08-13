@@ -67,18 +67,21 @@ function DashboardContent() {
   }
 
   const lineChartData =
-    data?.lines.map((l) => ({
-      name: l.line_number,
-      Target: l.target_output,
-      "Thực tế": l.out_fin_fin ?? 0,
-      negative: (l.var ?? 0) < 0,
-    })) ?? [];
+    data?.lines
+      .filter((l) => l.is_submitted)
+      .map((l) => ({
+        name: l.line_number,
+        Target: l.target_output,
+        "Thực tế": l.out_fin_fin ?? 0,
+        negative: (l.var ?? 0) < 0,
+      })) ?? [];
 
   const execChartData =
     data?.executives.map((e) => ({
       name: `${e.executive_name} (${e.pu_group})`,
       Target: e.target_output,
       "Thực tế": e.out_fin_fin,
+      negative: e.var < 0,
     })) ?? [];
 
   return (
@@ -130,35 +133,46 @@ function DashboardContent() {
           </div>
 
           <Card className="p-5">
-            <h2 className="mb-4 text-sm font-semibold text-foreground">Output theo Line (Target vs Thực tế)</h2>
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={lineChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="Target" fill="#c7d2fe" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Thực tế" radius={[4, 4, 0, 0]}>
-                  {lineChartData.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.negative ? "#dc2626" : "#2952e3"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">Output theo Line (Target vs Thực tế)</h2>
+              <p className="text-xs text-muted">Chỉ hiển thị {lineChartData.length} line đã nộp báo cáo</p>
+            </div>
+            {lineChartData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted">Chưa có line nào nộp báo cáo ngày này.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={lineChartData} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip cursor={{ fill: "#f1f5f9" }} />
+                  <Legend />
+                  <Bar dataKey="Target" fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="Thực tế" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                    {lineChartData.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.negative ? "#dc2626" : "#16a34a"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </Card>
 
           <Card className="p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Tổng hợp theo Executive / PU</h2>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
-                <Tooltip />
+                <Tooltip cursor={{ fill: "#f1f5f9" }} />
                 <Legend />
-                <Bar dataKey="Target" fill="#c7d2fe" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="Thực tế" fill="#2952e3" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="Target" fill="#cbd5e1" radius={[0, 4, 4, 0]} maxBarSize={22} />
+                <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22}>
+                  {execChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.negative ? "#dc2626" : "#16a34a"} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </Card>
