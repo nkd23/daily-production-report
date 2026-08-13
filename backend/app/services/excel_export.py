@@ -11,10 +11,12 @@ from datetime import date
 from io import BytesIO
 
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, PieChart, Reference
+from openpyxl.chart.label import DataLabelList
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from app.schemas import LineDaySummary
+from app.schemas import ExecutiveSummary, IssueItem, KpiSummary, LineDaySummary
 
 # NOTE: these thresholds are NOT confirmed with the factory yet — they are a
 # best guess reproducing the "tô cam / tô hồng" warning look of the original
@@ -156,7 +158,101 @@ def _subtotal_row_values(label: str, items: list[LineDaySummary]) -> list:
     ]
 
 
-def generate_daily_excel(lines: list[LineDaySummary], report_date: date) -> BytesIO:
+KPI_LABEL_FONT = Font(bold=True, size=9, color="64748B")
+KPI_VALUE_FONT = Font(bold=True, size=16, color="1F4E78")
+
+
+def _add_dashboard_sheet(
+    wb: Workbook,
+    report_date: date,
+    kpi: KpiSummary,
+    executives: list[ExecutiveSummary],
+    issues: list[IssueItem],
+):
+    ws = wb.create_sheet("Dashboard", 0)
+    ws.sheet_view.showGridLines = False
+
+    ws.cell(row=1, column=1, value=f"DASHBOARD SẢN LƯỢNG - {report_date.strftime('%d/%m/%Y')}").font = Font(
+        bold=True, size=16, color="1F4E78"
+    )
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=6)
+
+    kpi_items = [
+        ("Target Output", f"{kpi.total_target_output:,}"),
+        ("Actual Output", f"{kpi.total_actual_output:,}"),
+        ("% Hoàn thành", f"{kpi.completion_rate}%" if kpi.completion_rate is not None else "-"),
+        ("EFF SEW TB", f"{kpi.avg_eff_sew}%" if kpi.avg_eff_sew is not None else "-"),
+        ("EFF FIN TB", f"{kpi.avg_eff_fin}%" if kpi.avg_eff_fin is not None else "-"),
+        ("Line có Issue", f"{kpi.lines_with_issue} ({kpi.lines_submitted}/{kpi.lines_total} đã nộp)"),
+    ]
+    for col_idx, (label, value) in enumerate(kpi_items, start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 18
+        ws.cell(row=3, column=col_idx, value=label).font = KPI_LABEL_FONT
+        ws.cell(row=4, column=col_idx, value=value).font = KPI_VALUE_FONT
+
+    # Small data table (Executive: Target vs Thực tế) that both charts read from.
+    data_row = 7
+    ws.cell(row=data_row, column=1, value="Executive").font = Font(bold=True)
+    ws.cell(row=data_row, column=2, value="Target").font = Font(bold=True)
+    ws.cell(row=data_row, column=3, value="Thực tế").font = Font(bold=True)
+    for offset, exec_summary in enumerate(executives, start=1):
+        r = data_row + offset
+        ws.cell(row=r, column=1, value=exec_summary.executive_name)
+        ws.cell(row=r, column=2, value=exec_summary.target_output)
+        ws.cell(row=r, column=3, value=exec_summary.out_fin_fin)
+    data_end_row = data_row + len(executives)
+
+    if executives:
+        cats = Reference(ws, min_col=1, min_row=data_row + 1, max_row=data_end_row)
+
+        bar = BarChart()
+        bar.type = "col"
+        bar.title = "Output theo Executive (Target vs Thực tế)"
+        bar.y_axis.title = "Sản lượng"
+        bar_data = Reference(ws, min_col=2, max_col=3, min_row=data_row, max_row=data_end_row)
+        bar.add_data(bar_data, titles_from_data=True)
+        bar.set_categories(cats)
+        bar.width = 17
+        bar.height = 9
+        ws.add_chart(bar, f"A{data_end_row + 2}")
+
+        pie = PieChart()
+        pie.title = "Tỷ trọng Output thực tế theo Executive"
+        pie_data = Reference(ws, min_col=3, min_row=data_row, max_row=data_end_row)
+        pie.add_data(pie_data, titles_from_data=True)
+        pie.set_categories(cats)
+        pie.dataLabels = DataLabelList()
+        pie.dataLabels.showPercent = True
+        pie.width = 13
+        pie.height = 9
+        ws.add_chart(pie, f"H{data_end_row + 2}")
+
+    issue_row = data_end_row + 21
+    ws.cell(row=issue_row, column=1, value="Issue trong ngày").font = Font(bold=True, size=12)
+    issue_row += 1
+    for col_idx, header in enumerate(["Line", "Buyer", "Executive", "Issue / Lí do"], start=1):
+        cell = ws.cell(row=issue_row, column=col_idx, value=header)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+    ws.column_dimensions["D"].width = 60
+    for issue in issues:
+        issue_row += 1
+        ws.cell(row=issue_row, column=1, value=issue.line_number)
+        ws.cell(row=issue_row, column=2, value=issue.buyer)
+        ws.cell(row=issue_row, column=3, value=issue.executive_name)
+        ws.cell(row=issue_row, column=4, value=issue.issue_note).alignment = Alignment(wrap_text=True)
+    if not issues:
+        issue_row += 1
+        ws.cell(row=issue_row, column=1, value="Không có issue nào được ghi nhận.")
+
+
+def generate_daily_excel(
+    lines: list[LineDaySummary],
+    report_date: date,
+    kpi: KpiSummary | None = None,
+    executives: list[ExecutiveSummary] | None = None,
+    issues: list[IssueItem] | None = None,
+) -> BytesIO:
     wb = Workbook()
     ws = wb.active
     ws.title = report_date.isoformat()
@@ -230,6 +326,9 @@ def generate_daily_excel(lines: list[LineDaySummary], report_date: date) -> Byte
     for row in ws.iter_rows(min_row=header_row, max_row=row_idx, min_col=14, max_col=14):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    if kpi is not None and executives is not None and issues is not None:
+        _add_dashboard_sheet(wb, report_date, kpi, executives, issues)
 
     buffer = BytesIO()
     wb.save(buffer)
