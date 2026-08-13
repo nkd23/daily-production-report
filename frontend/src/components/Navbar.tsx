@@ -10,7 +10,7 @@ import type { UserRole } from "@/lib/types";
 
 const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; roles: UserRole[] }[] = [
   { href: "/to-truong", label: "Nhập sản lượng", icon: ClipboardList, roles: ["to_truong"] },
-  { href: "/thu-ky", label: "Theo dõi nộp báo cáo", icon: ClipboardList, roles: ["thu_ky"] },
+  { href: "/thu-ky", label: "Theo dõi nộp báo cáo", icon: ClipboardList, roles: ["thu_ky", "sep"] },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep"] },
   { href: "/thu-ky/config", label: "Cấu hình Line", icon: Settings2, roles: ["thu_ky", "sep"] },
 ];

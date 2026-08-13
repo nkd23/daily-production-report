@@ -111,7 +111,7 @@ function ThuKyContent() {
 
 export default function ThuKyPage() {
   return (
-    <RequireRole roles={["thu_ky"]}>
+    <RequireRole roles={["thu_ky", "sep"]}>
       <ThuKyContent />
     </RequireRole>
   );
