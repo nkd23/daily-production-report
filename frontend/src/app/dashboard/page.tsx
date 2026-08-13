@@ -39,6 +39,21 @@ function fmt(n: number | null | undefined, suffix = "") {
   return `${n.toLocaleString("vi-VN")}${suffix}`;
 }
 
+// One color per Executive (the person whose Tổ trưởng report up to them,
+// not a Tổ trưởng themselves) so their lines are visually grouped in charts.
+// Target bar = lighter tint, Thực tế bar = solid, of the same hue.
+const EXEC_COLORS: Record<string, { light: string; solid: string }> = {
+  "Ms Thảo": { light: "#fbbf24", solid: "#b45309" }, // amber
+  "Ms Hương": { light: "#a78bfa", solid: "#5b21b6" }, // violet
+  "Ms Doan": { light: "#34d399", solid: "#047857" }, // emerald
+  "Ms Phương": { light: "#60a5fa", solid: "#1d4ed8" }, // blue
+  "Ms Huệ": { light: "#f472b6", solid: "#be185d" }, // pink
+};
+const FALLBACK_COLOR = { light: "#94a3b8", solid: "#334155" }; // slate, for any other Executive
+function execColor(name: string) {
+  return EXEC_COLORS[name] ?? FALLBACK_COLOR;
+}
+
 function DashboardContent() {
   const [reportDate, setReportDate] = useState(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -71,10 +86,11 @@ function DashboardContent() {
       .filter((l) => l.is_submitted)
       .map((l) => ({
         name: l.line_number,
+        executive: l.executive_name,
         Target: l.target_output,
         "Thực tế": l.out_fin_fin ?? 0,
-        negative: (l.var ?? 0) < 0,
       })) ?? [];
+  const lineChartExecs = [...new Set(lineChartData.map((d) => d.executive))];
 
   const execChartData =
     data?.executives.map((e) => ({
@@ -133,9 +149,19 @@ function DashboardContent() {
           </div>
 
           <Card className="p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-foreground">Output theo Line (Target vs Thực tế)</h2>
-              <p className="text-xs text-muted">Chỉ hiển thị {lineChartData.length} line đã nộp báo cáo</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {lineChartExecs.map((exec) => (
+                  <span key={exec} className="flex items-center gap-1.5 text-xs text-muted">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: execColor(exec).solid }}
+                    />
+                    {exec}
+                  </span>
+                ))}
+              </div>
             </div>
             {lineChartData.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted">Chưa có line nào nộp báo cáo ngày này.</p>
@@ -146,11 +172,14 @@ function DashboardContent() {
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip cursor={{ fill: "#f1f5f9" }} />
-                  <Legend />
-                  <Bar dataKey="Target" fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="Target" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                    {lineChartData.map((entry, idx) => (
+                      <Cell key={idx} fill={execColor(entry.executive).light} />
+                    ))}
+                  </Bar>
                   <Bar dataKey="Thực tế" radius={[4, 4, 0, 0]} maxBarSize={36}>
                     {lineChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.negative ? "#dc2626" : "#16a34a"} />
+                      <Cell key={idx} fill={execColor(entry.executive).solid} />
                     ))}
                   </Bar>
                 </BarChart>
