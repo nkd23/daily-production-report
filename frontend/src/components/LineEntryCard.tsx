@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, Pencil, Send, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Pencil, Send, Trash2, X } from "lucide-react";
 import { Badge, Button, Input, Label, Textarea } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { DailyReportInput, LineWithReport } from "@/lib/types";
@@ -44,6 +44,7 @@ export function LineEntryCard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [editingTargets, setEditingTargets] = useState(false);
   const [targetForm, setTargetForm] = useState({
@@ -123,6 +124,23 @@ export function LineEntryCard({
 
   const submitted = report?.is_submitted ?? false;
   const locked = !is_editable;
+
+  async function handleDelete() {
+    if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} - Ca ${shift}?\nKhông thể hoàn tác.`)) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.deleteReport(line.id, reportDate, shift);
+      setForm({ ...emptyForm, shift });
+      onSubmitted();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Không xóa được, vui lòng thử lại");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-surface shadow-sm shadow-slate-200/60">
@@ -307,6 +325,18 @@ export function LineEntryCard({
             <Send size={15} />
             {saving ? "Đang nộp..." : "Nộp báo cáo"}
           </Button>
+          {submitted && !locked ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={deleting}
+              onClick={handleDelete}
+              className="w-full"
+            >
+              <Trash2 size={14} />
+              {deleting ? "Đang xóa..." : "Xóa & nhập lại"}
+            </Button>
+          ) : null}
           {locked ? <p className="text-xs text-muted">Liên hệ Thư ký để mở khoá nếu cần sửa.</p> : null}
         </div>
       </form>

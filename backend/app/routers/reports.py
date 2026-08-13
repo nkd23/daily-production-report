@@ -134,6 +134,35 @@ def submit_report(
     return _report_out(report, line)
 
 
+@router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(
+    line_id: int,
+    report_date: date = Query(default_factory=local_today),
+    shift: int = Query(default=1, ge=1, le=2),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Let a Tổ trưởng wipe a wrongly-entered report and start over (or Thư
+    ký/Sếp do it for them). Blocked once locked, same rule as submitting."""
+    line = _get_line_or_404(db, line_id)
+    _assert_line_access(current_user, line)
+
+    report = db.scalar(
+        select(DailyReport).where(
+            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
+        )
+    )
+    if report is None:
+        return
+
+    effective_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+    if current_user.role == UserRole.to_truong and effective_locked:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
+
+    db.delete(report)
+    db.commit()
+
+
 @router.patch("/{report_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
 def set_lock(report_id: int, payload: UnlockRequest, db: Session = Depends(get_db)):
     report = db.get(DailyReport, report_id)

@@ -64,6 +64,11 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<User>("/api/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<User>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 
   listUsers: (role?: UserRole) =>
     request<User[]>(`/api/users${role ? `?role=${role}` : ""}`),
@@ -101,6 +106,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ is_locked: isLocked }),
     }),
+  deleteReport: (lineId: number, reportDate: string, shift: number) =>
+    request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}&shift=${shift}`, { method: "DELETE" }),
 
   dashboardSummary: (reportDate: string) =>
     request<DashboardResponse>(`/api/dashboard/summary?report_date=${reportDate}`),

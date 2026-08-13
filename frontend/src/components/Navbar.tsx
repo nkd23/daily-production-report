@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound } from "lucide-react";
 import { useAuth, roleLabel } from "@/lib/auth-context";
+import { ChangePasswordModal } from "./ChangePasswordModal";
 import type { UserRole } from "@/lib/types";
 
 const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; roles: UserRole[] }[] = [
@@ -16,6 +18,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; ro
 export function Navbar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const [changingPassword, setChangingPassword] = useState(false);
 
   if (!user) return null;
 
@@ -54,6 +57,14 @@ export function Navbar() {
             <p className="mt-1 text-xs text-muted">{roleLabel[user.role]}</p>
           </div>
           <button
+            onClick={() => setChangingPassword(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-slate-100 hover:text-foreground"
+            title="Đổi mật khẩu"
+          >
+            <KeyRound size={16} />
+            <span className="hidden sm:inline">Đổi mật khẩu</span>
+          </button>
+          <button
             onClick={logout}
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-slate-100 hover:text-danger"
             title="Đăng xuất"
@@ -63,6 +74,7 @@ export function Navbar() {
           </button>
         </div>
       </div>
+      {changingPassword ? <ChangePasswordModal onClose={() => setChangingPassword(false)} /> : null}
     </header>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, ShieldCheck, UserX } from "lucide-react";
+import { KeyRound, Plus, ShieldCheck, UserX } from "lucide-react";
 import { Badge, Button, Card, Input, Label, Select } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import { roleLabel } from "@/lib/auth-context";
@@ -11,6 +11,35 @@ export function UserManagement({ users, onChanged }: { users: User[]; onChanged:
   const [form, setForm] = useState({ username: "", password: "", full_name: "", role: "to_truong" as UserRole });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [resettingId, setResettingId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetSaving, setResetSaving] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  function startReset(id: number) {
+    setResettingId(id);
+    setResetPassword("");
+    setResetError(null);
+  }
+
+  async function handleResetPassword(id: number) {
+    if (resetPassword.length < 6) {
+      setResetError("Mật khẩu phải có ít nhất 6 ký tự");
+      return;
+    }
+    setResetSaving(true);
+    setResetError(null);
+    try {
+      await api.updateUser(id, { password: resetPassword });
+      setResettingId(null);
+      onChanged();
+    } catch (err) {
+      setResetError(err instanceof ApiError ? err.message : "Không đặt lại được mật khẩu");
+    } finally {
+      setResetSaving(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,10 +117,36 @@ export function UserManagement({ users, onChanged }: { users: User[]; onChanged:
                   {u.is_active ? <Badge tone="success">Hoạt động</Badge> : <Badge tone="default">Đã khoá</Badge>}
                 </td>
                 <td className="py-2 pr-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => toggleActive(u)}>
-                    {u.is_active ? <UserX size={14} className="text-danger" /> : <ShieldCheck size={14} className="text-success" />}
-                    {u.is_active ? "Khoá" : "Kích hoạt"}
-                  </Button>
+                  {resettingId === u.id ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="password"
+                          placeholder="Mật khẩu mới"
+                          className="w-36"
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                        />
+                        <Button size="sm" disabled={resetSaving} onClick={() => handleResetPassword(u.id)}>
+                          {resetSaving ? "Đang lưu..." : "Lưu"}
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => setResettingId(null)}>
+                          Hủy
+                        </Button>
+                      </div>
+                      {resetError ? <p className="text-xs text-danger">{resetError}</p> : null}
+                    </div>
+                  ) : (
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => startReset(u.id)}>
+                        <KeyRound size={14} /> Đặt lại MK
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => toggleActive(u)}>
+                        {u.is_active ? <UserX size={14} className="text-danger" /> : <ShieldCheck size={14} className="text-success" />}
+                        {u.is_active ? "Khoá" : "Kích hoạt"}
+                      </Button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
