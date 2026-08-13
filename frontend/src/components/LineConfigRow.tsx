@@ -29,7 +29,6 @@ export function LineConfigRow({
         line_number: form.line_number,
         executive_name: form.executive_name,
         pu_group: form.pu_group,
-        buyer: form.buyer,
         sam: Number(form.sam),
         target_output: Number(form.target_output),
         target_eff: Number(form.target_eff),
@@ -63,9 +62,6 @@ export function LineConfigRow({
       </td>
       <td className="px-3 py-2">
         <Input value={form.executive_name} onChange={(e) => setForm({ ...form, executive_name: e.target.value })} className="w-32" />
-      </td>
-      <td className="px-3 py-2">
-        <Input value={form.buyer} onChange={(e) => setForm({ ...form, buyer: e.target.value })} className="w-28" />
       </td>
       <td className="px-3 py-2">
         <Input type="number" step="0.1" value={form.sam} onChange={(e) => setForm({ ...form, sam: Number(e.target.value) })} className="w-20" />

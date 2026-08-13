@@ -1,12 +1,79 @@
-"""Seed initial demo data: one account per role + a handful of lines.
+"""Seed initial data: admin accounts, one Tổ trưởng account per Executive,
+and the real line -> executive assignments.
 
 Usage: .venv/Scripts/python seed.py
 Safe to re-run: skips rows whose username/line_number already exist.
+
+NOTE: PU (PU1/PU2), Buyer[*], SAM, Target Output, Target EFF are not known
+for the real lines yet, so lines are created with placeholder values
+(PU1 / SAM 0 / Target 0). Go to "Cấu hình Line" (Thư ký/Sếp) to fill in the
+real numbers per line.
+[*] Buyer is no longer a fixed line attribute - Tổ trưởng enters it on every
+submission instead (a line's buyer/style can change day to day).
 """
 
 from app.database import SessionLocal
 from app.models import Line, PuGroup, User, UserRole
 from app.security import hash_password
+
+# Tổ trưởng account per Executive. Username/password are placeholders -
+# change them (or ask a Thư ký/Sếp to) before real use.
+EXECUTIVES = {
+    "Ms Thảo": ("to_thao", "Totruong@2026"),
+    "Ms Hương": ("to_huong", "Totruong@2026"),
+    "Ms Doan": ("to_doan", "Totruong@2026"),
+    "Ms Phương": ("to_phuong", "Totruong@2026"),
+    "Ms Huệ": ("to_hue", "Totruong@2026"),
+}
+
+# line_number -> executive_name
+LINES = [
+    ("01AB", "Ms Thảo"),
+    ("02AB", "Ms Thảo"),
+    ("03AB", "Ms Thảo"),
+    ("04AB", "Ms Thảo"),
+    ("05AB", "Ms Thảo"),
+    ("06AB", "Ms Thảo"),
+    ("07AB", "Ms Thảo"),
+    ("08AB", "Ms Hương"),
+    ("09AB", "Ms Hương"),
+    ("10AB", "Ms Hương"),
+    ("11AB", "Ms Hương"),
+    ("12AB", "Ms Hương"),
+    ("13AB", "Ms Hương"),
+    ("14AB", "Ms Hương"),
+    ("15AB", "Ms Hương"),
+    ("16AB", "Ms Hương"),
+    ("17AB", "Ms Hương"),
+    ("18AB", "Ms Thảo"),
+    ("19AB", "Ms Thảo"),
+    ("20AB", "Ms Doan"),
+    ("21AB", "Ms Doan"),
+    ("23AB", "Ms Doan"),
+    ("24AB", "Ms Doan"),
+    ("25AB", "Ms Doan"),
+    ("26AB", "Ms Doan"),
+    ("27AB", "Ms Doan"),
+    ("28AB", "Ms Doan"),
+    ("29AB", "Ms Doan"),
+    ("30AB", "Ms Doan"),
+    ("31AB", "Ms Doan"),
+    ("32AB", "Ms Phương"),
+    ("33AB", "Ms Phương"),
+    ("34AB", "Ms Phương"),
+    ("35AB", "Ms Phương"),
+    ("36AB", "Ms Phương"),
+    ("37AB", "Ms Phương"),
+    ("38AB", "Ms Phương"),
+    ("39AB", "Ms Phương"),
+    ("40AB", "Ms Phương"),
+    ("41AB", "Ms Hương"),
+    ("42AB", "Ms Hương"),
+    ("43AB", "Ms Huệ"),
+    ("44AB", "Ms Thảo"),
+    ("45AB", "Ms Phương"),
+    ("47AB", "Ms Doan"),
+]
 
 
 def get_or_create_user(db, username, password, full_name, role):
@@ -19,11 +86,20 @@ def get_or_create_user(db, username, password, full_name, role):
     return user
 
 
-def get_or_create_line(db, **kwargs):
-    line = db.query(Line).filter(Line.line_number == kwargs["line_number"]).first()
+def get_or_create_line(db, line_number, executive_name, to_truong_user_id, display_order):
+    line = db.query(Line).filter(Line.line_number == line_number).first()
     if line:
         return line
-    line = Line(**kwargs)
+    line = Line(
+        line_number=line_number,
+        executive_name=executive_name,
+        pu_group=PuGroup.PU1,
+        sam=0,
+        target_output=0,
+        target_eff=0,
+        to_truong_user_id=to_truong_user_id,
+        display_order=display_order,
+    )
     db.add(line)
     db.flush()
     return line
@@ -32,40 +108,29 @@ def get_or_create_line(db, **kwargs):
 def main():
     db = SessionLocal()
     try:
-        sep = get_or_create_user(db, "sep", "sep123", "Giám Đốc Nhà Máy", UserRole.sep)
-        thu_ky = get_or_create_user(db, "thuky", "thuky123", "Nguyễn Thị Thư Ký", UserRole.thu_ky)
-        tt_thao = get_or_create_user(db, "totruong1", "tt123", "Trần Văn A (Line 1-2)", UserRole.to_truong)
-        tt_huong = get_or_create_user(db, "totruong2", "tt123", "Lê Thị B (Line 3-4)", UserRole.to_truong)
-        tt_doan = get_or_create_user(db, "totruong3", "tt123", "Phạm Văn C (Line 5)", UserRole.to_truong)
+        get_or_create_user(db, "sep", "sep123", "Giám Đốc Nhà Máy", UserRole.sep)
+        get_or_create_user(db, "thuky", "thuky123", "Nguyễn Thị Thư Ký", UserRole.thu_ky)
+
+        executive_user_ids = {}
+        for executive_name, (username, password) in EXECUTIVES.items():
+            user = get_or_create_user(db, username, password, executive_name, UserRole.to_truong)
+            executive_user_ids[executive_name] = user.id
         db.commit()
 
-        get_or_create_line(
-            db, line_number="Line 1", executive_name="Ms Thảo", pu_group=PuGroup.PU1, buyer="Nike",
-            sam=12.5, target_output=1200, target_eff=85, to_truong_user_id=tt_thao.id, display_order=1,
-        )
-        get_or_create_line(
-            db, line_number="Line 2", executive_name="Ms Thảo", pu_group=PuGroup.PU1, buyer="Nike",
-            sam=13.0, target_output=1100, target_eff=85, to_truong_user_id=tt_thao.id, display_order=2,
-        )
-        get_or_create_line(
-            db, line_number="Line 3", executive_name="Ms Hương", pu_group=PuGroup.PU1, buyer="Adidas",
-            sam=10.8, target_output=1300, target_eff=88, to_truong_user_id=tt_huong.id, display_order=3,
-        )
-        get_or_create_line(
-            db, line_number="Line 4", executive_name="Ms Hương", pu_group=PuGroup.PU2, buyer="Adidas",
-            sam=11.2, target_output=1250, target_eff=88, to_truong_user_id=tt_huong.id, display_order=4,
-        )
-        get_or_create_line(
-            db, line_number="Line 5", executive_name="Ms Doan", pu_group=PuGroup.PU2, buyer="Puma",
-            sam=14.0, target_output=1000, target_eff=80, to_truong_user_id=tt_doan.id, display_order=5,
-        )
+        for order, (line_number, executive_name) in enumerate(LINES, start=1):
+            get_or_create_line(db, line_number, executive_name, executive_user_ids[executive_name], order)
         db.commit()
-        print("Seed OK. Tài khoản demo:")
+
+        print("Seed OK.")
+        print("\nTài khoản quản lý:")
         print("  sep / sep123        (Sếp)")
         print("  thuky / thuky123    (Thư ký)")
-        print("  totruong1 / tt123   (Tổ trưởng - Line 1, 2)")
-        print("  totruong2 / tt123   (Tổ trưởng - Line 3, 4)")
-        print("  totruong3 / tt123   (Tổ trưởng - Line 5)")
+        print("\nTài khoản Tổ trưởng (theo Executive) - đổi mật khẩu trước khi dùng thật:")
+        for executive_name, (username, password) in EXECUTIVES.items():
+            n_lines = sum(1 for _, e in LINES if e == executive_name)
+            print(f"  {username} / {password}   ({executive_name} - phụ trách {n_lines} line)")
+        print(f"\nĐã tạo {len(LINES)} line. PU/SAM/Target còn là giá trị mặc định (0) -")
+        print("vào màn hình 'Cấu hình Line' (đăng nhập thuky/sep) để điền số liệu thật.")
     finally:
         db.close()
 

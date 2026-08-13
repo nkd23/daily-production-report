@@ -40,7 +40,7 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
           <Badge tone="primary">{summary.pu_group}</Badge>
         </td>
         <td className="px-4 py-3 text-muted">{summary.executive_name}</td>
-        <td className="px-4 py-3 text-muted">{summary.buyer}</td>
+        <td className="px-4 py-3 text-muted">{summary.buyer ?? "-"}</td>
         <td className="px-4 py-3 text-muted">{summary.shift_display}</td>
         <td className="px-4 py-3">
           {summary.is_submitted ? <Badge tone="success">Đã nộp</Badge> : <Badge tone="warning">Chưa nộp</Badge>}

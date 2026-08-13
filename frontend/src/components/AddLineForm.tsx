@@ -10,7 +10,6 @@ const emptyState = {
   line_number: "",
   executive_name: "",
   pu_group: "PU1" as PuGroup,
-  buyer: "",
   sam: 0,
   target_output: 0,
   target_eff: 0,
@@ -55,10 +54,6 @@ export function AddLineForm({ toTruongs, onCreated }: { toTruongs: User[]; onCre
       <div>
         <Label>Executive</Label>
         <Input required value={form.executive_name} onChange={(e) => setForm({ ...form, executive_name: e.target.value })} placeholder="Ms Thảo" />
-      </div>
-      <div>
-        <Label>Buyer</Label>
-        <Input required value={form.buyer} onChange={(e) => setForm({ ...form, buyer: e.target.value })} />
       </div>
       <div>
         <Label>SAM</Label>

@@ -14,7 +14,6 @@ export interface Line {
   line_number: string;
   executive_name: string;
   pu_group: PuGroup;
-  buyer: string;
   sam: number;
   target_output: number;
   target_eff: number;
@@ -29,6 +28,7 @@ export interface DailyReport {
   line_id: number;
   report_date: string;
   shift: number;
+  buyer: string | null;
   out_sew: number | null;
   eff_sew: number | null;
   out_fin_scanpack: number | null;
@@ -50,6 +50,7 @@ export interface LineWithReport {
 
 export interface DailyReportInput {
   shift: number;
+  buyer: string;
   out_sew: number | null;
   eff_sew: number | null;
   out_fin_scanpack: number | null;
@@ -64,7 +65,7 @@ export interface LineDaySummary {
   line_number: string;
   executive_name: string;
   pu_group: PuGroup;
-  buyer: string;
+  buyer: string | null;
   sam: number;
   target_output: number;
   target_eff: number;
@@ -105,7 +106,7 @@ export interface KpiSummary {
 
 export interface IssueItem {
   line_number: string;
-  buyer: string;
+  buyer: string | null;
   executive_name: string;
   issue_note: string;
 }

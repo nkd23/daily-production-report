@@ -1,8 +1,8 @@
-"""initial schema
+"""buyer moves to daily_reports
 
-Revision ID: d6e36269971e
+Revision ID: f5cbd06616aa
 Revises: 
-Create Date: 2026-08-12 23:00:27.381436
+Create Date: 2026-08-13 08:53:03.711004
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'd6e36269971e'
+revision: str = 'f5cbd06616aa'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -35,7 +35,6 @@ def upgrade() -> None:
     sa.Column('line_number', sa.Unicode(length=20), nullable=False),
     sa.Column('executive_name', sa.Unicode(length=100), nullable=False),
     sa.Column('pu_group', sa.Enum('PU1', 'PU2', name='pugroup'), nullable=False),
-    sa.Column('buyer', sa.Unicode(length=100), nullable=False),
     sa.Column('sam', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('target_output', sa.Integer(), nullable=False),
     sa.Column('target_eff', sa.Numeric(precision=6, scale=2), nullable=False),
@@ -53,6 +52,7 @@ def upgrade() -> None:
     sa.Column('line_id', sa.Integer(), nullable=False),
     sa.Column('report_date', sa.Date(), nullable=False),
     sa.Column('shift', sa.SmallInteger(), nullable=False),
+    sa.Column('buyer', sa.Unicode(length=100), nullable=True),
     sa.Column('out_sew', sa.Integer(), nullable=True),
     sa.Column('eff_sew', sa.Numeric(precision=6, scale=2), nullable=True),
     sa.Column('out_fin_scanpack', sa.Integer(), nullable=True),

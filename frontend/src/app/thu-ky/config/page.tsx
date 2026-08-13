@@ -42,7 +42,6 @@ function ConfigContent() {
                   <th className="px-3 py-2 font-medium">Line</th>
                   <th className="px-3 py-2 font-medium">PU</th>
                   <th className="px-3 py-2 font-medium">Executive</th>
-                  <th className="px-3 py-2 font-medium">Buyer</th>
                   <th className="px-3 py-2 font-medium">SAM</th>
                   <th className="px-3 py-2 font-medium">Target Out</th>
                   <th className="px-3 py-2 font-medium">Target EFF</th>

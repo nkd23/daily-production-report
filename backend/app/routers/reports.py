@@ -122,7 +122,7 @@ def submit_report(
         report = DailyReport(line_id=line_id, report_date=report_date, shift=payload.shift)
         db.add(report)
 
-    for field in ("out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_fin", "issue_note"):
+    for field in ("buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_fin", "issue_note"):
         setattr(report, field, getattr(payload, field))
 
     report.is_submitted = True

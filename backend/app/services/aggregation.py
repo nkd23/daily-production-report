@@ -49,6 +49,9 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         issue_note = " | ".join(issue_notes) if issue_notes else None
         shift_display = "+".join(str(r.shift) for r in line_reports) if line_reports else "-"
 
+        buyers = list(dict.fromkeys(r.buyer for r in line_reports if r.buyer))
+        buyer = " / ".join(buyers) if buyers else None
+
         is_submitted = any(r.is_submitted for r in line_reports)
         if line_reports:
             is_locked = all(
@@ -65,7 +68,7 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 line_number=line.line_number,
                 executive_name=line.executive_name,
                 pu_group=line.pu_group,
-                buyer=line.buyer,
+                buyer=buyer,
                 sam=float(line.sam),
                 target_output=line.target_output,
                 target_eff=float(line.target_eff),

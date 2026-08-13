@@ -48,17 +48,24 @@ uvicorn app.main:app --reload
 
 Backend chạy tại `http://localhost:8000`, xem docs tại `/docs`.
 
-Tài khoản demo sau khi seed:
+Tài khoản sau khi seed (45 line thật, gán theo Executive):
 
 | Username | Password | Vai trò |
 |---|---|---|
 | sep | sep123 | Sếp |
 | thuky | thuky123 | Thư ký |
-| totruong1 | tt123 | Tổ trưởng (Line 1, 2) |
-| totruong2 | tt123 | Tổ trưởng (Line 3, 4) |
-| totruong3 | tt123 | Tổ trưởng (Line 5) |
+| to_thao | Totruong@2026 | Tổ trưởng — Ms Thảo (10 line) |
+| to_huong | Totruong@2026 | Tổ trưởng — Ms Hương (12 line) |
+| to_doan | Totruong@2026 | Tổ trưởng — Ms Doan (12 line) |
+| to_phuong | Totruong@2026 | Tổ trưởng — Ms Phương (10 line) |
+| to_hue | Totruong@2026 | Tổ trưởng — Ms Huệ (1 line) |
 
-**Đổi mật khẩu các tài khoản demo trước khi dùng thật.**
+**Đổi mật khẩu các tài khoản này trước khi dùng thật** (dùng màn hình "Cấu hình
+Line" → mục "Quản lý tài khoản", hoặc nhờ Claude đổi giúp).
+
+PU (PU1/PU2), SAM, Target Output, Target EFF của 45 line trên đang là giá trị
+mặc định (0 / PU1) vì chưa có số liệu thật — Thư ký/Sếp cần vào "Cấu hình Line"
+điền số liệu thật cho từng line trước khi dùng.
 
 ### 3. Frontend
 
@@ -125,3 +132,6 @@ docker compose cp db:/var/opt/mssql/backup_$(date +%F).bak ./backup_$(date +%F).
   hằng số này.
 - **EFF-SEW / EFF-FIN** là số tổ trưởng tự nhập tay, hệ thống **không** tự tính từ
   OUT/Target (theo yêu cầu, vì công thức gốc chưa xác định được).
+- **Buyer** là mục tổ trưởng tự nhập mỗi lần nộp báo cáo (không phải cấu hình cố
+  định theo line, vì buyer/style trên 1 line có thể đổi theo ngày) — bắt buộc và
+  tự động chuyển thành chữ IN HOA khi nhập.

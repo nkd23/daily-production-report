@@ -51,7 +51,6 @@ class Line(Base):
     line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
     executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
-    buyer: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
@@ -74,6 +73,10 @@ class DailyReport(Base):
     report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
     shift: Mapped[int] = mapped_column(SmallInteger, nullable=False)
 
+    # Buyer/style the line is currently running - entered by Tổ trưởng each
+    # submission (can change day to day on the same line), not a fixed Line
+    # attribute. Always stored upper-case.
+    buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     out_sew: Mapped[int | None] = mapped_column(Integer, nullable=True)
     eff_sew: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     out_fin_scanpack: Mapped[int | None] = mapped_column(Integer, nullable=True)

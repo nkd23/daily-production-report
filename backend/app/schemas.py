@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import PuGroup, UserRole
 
@@ -44,7 +44,6 @@ class LineBase(BaseModel):
     line_number: str
     executive_name: str
     pu_group: PuGroup
-    buyer: str
     sam: float
     target_output: int
     target_eff: float
@@ -61,7 +60,6 @@ class LineUpdate(BaseModel):
     line_number: str | None = None
     executive_name: str | None = None
     pu_group: PuGroup | None = None
-    buyer: str | None = None
     sam: float | None = None
     target_output: int | None = None
     target_eff: float | None = None
@@ -79,6 +77,7 @@ class LineOut(LineBase):
 # ---------- Daily reports ----------
 class DailyReportInput(BaseModel):
     shift: int = Field(ge=1, le=2)
+    buyer: str = Field(min_length=1)
     out_sew: int | None = Field(default=None, ge=0)
     eff_sew: float | None = Field(default=None, ge=0)
     out_fin_scanpack: int | None = Field(default=None, ge=0)
@@ -87,6 +86,14 @@ class DailyReportInput(BaseModel):
     wip_fin: int | None = Field(default=None, ge=0)
     issue_note: str | None = None
 
+    @field_validator("buyer")
+    @classmethod
+    def uppercase_buyer(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v:
+            raise ValueError("Buyer không được để trống")
+        return v
+
 
 class DailyReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -94,6 +101,7 @@ class DailyReportOut(BaseModel):
     line_id: int
     report_date: date
     shift: int
+    buyer: str | None
     out_sew: int | None
     eff_sew: float | None
     out_fin_scanpack: int | None
@@ -123,7 +131,7 @@ class LineDaySummary(BaseModel):
     line_number: str
     executive_name: str
     pu_group: PuGroup
-    buyer: str
+    buyer: str | None
     sam: float
     target_output: int
     target_eff: float
@@ -164,7 +172,7 @@ class KpiSummary(BaseModel):
 
 class IssueItem(BaseModel):
     line_number: str
-    buyer: str
+    buyer: str | None
     executive_name: str
     issue_note: str
 

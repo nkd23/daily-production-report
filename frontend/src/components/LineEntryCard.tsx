@@ -18,6 +18,7 @@ function parseNumber(v: string): number | null {
 
 const emptyForm: DailyReportInput = {
   shift: 1,
+  buyer: "",
   out_sew: null,
   eff_sew: null,
   out_fin_scanpack: null,
@@ -49,6 +50,7 @@ export function LineEntryCard({
       report
         ? {
             shift,
+            buyer: report.buyer ?? "",
             out_sew: report.out_sew,
             eff_sew: report.eff_sew,
             out_fin_scanpack: report.out_fin_scanpack,
@@ -91,8 +93,7 @@ export function LineEntryCard({
             <span className="text-sm text-muted">{line.executive_name}</span>
           </div>
           <p className="mt-0.5 text-sm text-muted">
-            {line.buyer} · SAM {line.sam} · Target {line.target_output.toLocaleString("vi-VN")} sp · Target EFF{" "}
-            {line.target_eff}%
+            SAM {line.sam} · Target {line.target_output.toLocaleString("vi-VN")} sp · Target EFF {line.target_eff}%
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -119,6 +120,17 @@ export function LineEntryCard({
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3 lg:grid-cols-6">
+        <div>
+          <Label>Buyer *</Label>
+          <Input
+            required
+            disabled={locked}
+            value={form.buyer}
+            onChange={(e) => setForm({ ...form, buyer: e.target.value.toUpperCase() })}
+            placeholder="VD: NIKE"
+            className="uppercase placeholder:normal-case"
+          />
+        </div>
         <div>
           <Label>OUT-SEW (SL May+OT)</Label>
           <Input
