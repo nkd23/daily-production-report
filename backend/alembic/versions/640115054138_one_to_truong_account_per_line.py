@@ -1,8 +1,8 @@
-"""buyer moves to daily_reports
+"""one to_truong account per line
 
-Revision ID: f5cbd06616aa
+Revision ID: 640115054138
 Revises: 
-Create Date: 2026-08-13 08:53:03.711004
+Create Date: 2026-08-13 09:13:11.676838
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'f5cbd06616aa'
+revision: str = '640115054138'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
