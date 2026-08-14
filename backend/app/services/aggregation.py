@@ -103,8 +103,12 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         out_sew = sum((r.out_sew or 0) for r in line_reports) if line_reports else None
         out_scanpack = sum((r.out_fin_scanpack or 0) for r in line_reports) if line_reports else None
         out_fin = sum((r.out_fin_fin or 0) for r in line_reports) if line_reports else None
-        wip_values = [r.wip_fin for r in line_reports if r.wip_fin is not None]
-        wip_fin = wip_values[-1] if wip_values else None
+        # Stock levels, not flows: the later shift's reading already accounts
+        # for the earlier one, so take the last reported rather than summing.
+        dip_values = [r.wip_dip for r in line_reports if r.wip_dip is not None]
+        wip_dip = dip_values[-1] if dip_values else None
+        pre_pi_values = [r.wip_pre_pi for r in line_reports if r.wip_pre_pi is not None]
+        wip_pre_pi = pre_pi_values[-1] if pre_pi_values else None
         # Each shift the line ran counts once, so a line that ran both shifts
         # gets the plain average of the two - equivalent to the original sheet,
         # where that line would occupy one row carrying Shift/Ca = 2.
@@ -162,7 +166,8 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 out_fin_fin=out_fin,
                 eff_fin=eff_fin,
                 var=var,
-                wip_fin=wip_fin,
+                wip_dip=wip_dip,
+                wip_pre_pi=wip_pre_pi,
                 issue_note=issue_note,
                 is_submitted=is_submitted,
                 is_locked=is_locked,
@@ -214,7 +219,8 @@ def _build_group_summary(
         out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
         eff_fin_avg=_shift_weighted_avg([(i.eff_fin_weight, i.eff_fin) for i in items]),
         var=sum((i.var or 0) for i in items),
-        wip_fin=sum((i.wip_fin or 0) for i in items),
+        wip_dip=sum((i.wip_dip or 0) for i in items),
+        wip_pre_pi=sum((i.wip_pre_pi or 0) for i in items),
     )
 
 
@@ -272,7 +278,8 @@ def build_kpi_summary(lines: list[LineDaySummary]) -> KpiSummary:
         completion_rate=round(total_actual / total_target * 100, 1) if total_target else None,
         avg_eff_sew=_shift_weighted_avg([(l.eff_sew_weight, l.eff_sew) for l in lines]),
         avg_eff_fin=_shift_weighted_avg([(l.eff_fin_weight, l.eff_fin) for l in lines]),
-        total_wip=sum((l.wip_fin or 0) for l in lines),
+        total_wip_dip=sum((l.wip_dip or 0) for l in lines),
+        total_wip_pre_pi=sum((l.wip_pre_pi or 0) for l in lines),
         lines_with_issue=sum(1 for l in lines if l.issue_note),
         lines_submitted=sum(1 for l in lines if l.is_submitted),
         lines_total=len(lines),

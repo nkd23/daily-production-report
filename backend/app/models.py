@@ -99,7 +99,13 @@ class DailyReport(Base):
     out_fin_scanpack: Mapped[int | None] = mapped_column(Integer, nullable=True)
     out_fin_fin: Mapped[int | None] = mapped_column(Integer, nullable=True)
     eff_fin: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
-    wip_fin: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Work-in-progress stock at two separate stages, as the Tổ trưởng reports
+    # them at end of shift. These replaced a single "WIP FIN" field, which the
+    # factory confirmed measured something else entirely - its history was
+    # exported to backup_wip_fin_truoc_khi_xoa.csv before removal rather than
+    # being carried over, since the numbers are not comparable.
+    wip_dip: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wip_pre_pi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     issue_note: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
     is_submitted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

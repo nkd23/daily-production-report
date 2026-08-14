@@ -371,7 +371,8 @@ function DashboardContent() {
                     <th className="px-4 py-2 text-right font-medium">OUT-FIN (Fin)</th>
                     <th className="px-4 py-2 text-right font-medium">EFF-FIN</th>
                     <th className="px-4 py-2 text-right font-medium">VAR</th>
-                    <th className="px-4 py-2 text-right font-medium">WIP FIN</th>
+                    <th className="px-4 py-2 text-right font-medium">Tồn Dip</th>
+                    <th className="px-4 py-2 text-right font-medium">Tồn trước PI</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -413,12 +414,13 @@ function DashboardContent() {
                       <td className={`px-4 py-2 text-right ${row.var < 0 && row.level === "executive" ? "text-danger font-semibold" : ""}`}>
                         {row.var.toLocaleString("vi-VN")}
                       </td>
-                      <td className="px-4 py-2 text-right">{row.wip_fin.toLocaleString("vi-VN")}</td>
+                      <td className="px-4 py-2 text-right">{row.wip_dip.toLocaleString("vi-VN")}</td>
+                      <td className="px-4 py-2 text-right">{row.wip_pre_pi.toLocaleString("vi-VN")}</td>
                     </tr>
                   ))}
                   {!data.summary_table || data.summary_table.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-sm text-muted">
+                      <td colSpan={13} className="px-4 py-8 text-center text-sm text-muted">
                         Chưa có line nào nộp báo cáo ngày này.
                       </td>
                     </tr>

@@ -34,7 +34,8 @@ export interface DailyReport {
   out_fin_scanpack: number | null;
   out_fin_fin: number | null;
   eff_fin: number | null;
-  wip_fin: number | null;
+  wip_dip: number | null;
+  wip_pre_pi: number | null;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -56,7 +57,8 @@ export interface DailyReportInput {
   out_fin_scanpack: number | null;
   out_fin_fin: number | null;
   eff_fin: number | null;
-  wip_fin: number | null;
+  wip_dip: number | null;
+  wip_pre_pi: number | null;
   issue_note: string | null;
 }
 
@@ -79,7 +81,8 @@ export interface LineDaySummary {
   out_fin_fin: number | null;
   eff_fin: number | null;
   var: number | null;
-  wip_fin: number | null;
+  wip_dip: number | null;
+  wip_pre_pi: number | null;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -109,7 +112,8 @@ export interface GroupSummary {
   out_fin_fin: number;
   eff_fin_avg: number | null;
   var: number;
-  wip_fin: number;
+  wip_dip: number;
+  wip_pre_pi: number;
 }
 
 export interface KpiSummary {
@@ -118,7 +122,8 @@ export interface KpiSummary {
   completion_rate: number | null;
   avg_eff_sew: number | null;
   avg_eff_fin: number | null;
-  total_wip: number;
+  total_wip_dip: number;
+  total_wip_pre_pi: number;
   lines_with_issue: number;
   lines_submitted: number;
   lines_total: number;

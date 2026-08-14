@@ -99,7 +99,8 @@ class DailyReportInput(BaseModel):
     out_fin_scanpack: int | None = Field(default=None, ge=0)
     out_fin_fin: int | None = Field(default=None, ge=0)
     eff_fin: float | None = Field(default=None, ge=0)
-    wip_fin: int | None = Field(default=None, ge=0)
+    wip_dip: int | None = Field(default=None, ge=0)
+    wip_pre_pi: int | None = Field(default=None, ge=0)
     issue_note: str | None = None
 
     @field_validator("buyer")
@@ -123,7 +124,8 @@ class DailyReportOut(BaseModel):
     out_fin_scanpack: int | None
     out_fin_fin: int | None
     eff_fin: float | None
-    wip_fin: int | None
+    wip_dip: int | None
+    wip_pre_pi: int | None
     issue_note: str | None
     is_submitted: bool
     is_locked: bool
@@ -168,7 +170,8 @@ class LineDaySummary(BaseModel):
     out_fin_fin: int | None
     eff_fin: float | None
     var: int | None
-    wip_fin: int | None
+    wip_dip: int | None
+    wip_pre_pi: int | None
     issue_note: str | None
     is_submitted: bool
     is_locked: bool
@@ -201,7 +204,8 @@ class GroupSummary(BaseModel):
     out_fin_fin: int
     eff_fin_avg: float | None
     var: int
-    wip_fin: int
+    wip_dip: int
+    wip_pre_pi: int
 
 
 class KpiSummary(BaseModel):
@@ -210,7 +214,8 @@ class KpiSummary(BaseModel):
     completion_rate: float | None
     avg_eff_sew: float | None
     avg_eff_fin: float | None
-    total_wip: int
+    total_wip_dip: int
+    total_wip_pre_pi: int
     lines_with_issue: int
     lines_submitted: int
     lines_total: int

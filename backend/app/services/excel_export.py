@@ -1,7 +1,11 @@
 """Excel export that reproduces the factory's original daily report layout:
 
 Line | NEW OUT-TAR | NEW EFF-TAR | Buyer | SAM | Shift | OUT-SEW | EFF-SEW |
-OUT-FIN(ScanPack) | OUT-FIN(Fin) | EFF-FIN | VAR | WIP FIN | Issue/Lí do
+OUT-FIN(ScanPack) | OUT-FIN(Fin) | EFF-FIN | VAR | Tồn Dip | Tồn trước PI |
+Issue/Lí do
+
+(The original sheet had a single "WIP FIN" column here; the factory split it
+into the two stock readings the Tổ trưởng actually reports at end of shift.)
 
 Rows: one per Line, grouped by Executive (subtotal row after each group),
 then by PU1/PU2 (subtotal row after each PU), then a final TTL row.
@@ -38,7 +42,8 @@ COLUMNS = [
     ("OUT-FIN(Fin)", 13),
     ("EFF-FIN", 11),
     ("VAR", 10),
-    ("WIP FIN", 10),
+    ("Tồn Dip", 11),
+    ("Tồn trước PI", 13),
     ("Issue/Lí do", 40),
 ]
 
@@ -101,18 +106,25 @@ def _write_row(ws, row_idx: int, values: list, *, bold=False, fill=None, font=No
     return row_idx
 
 
+# Keyed by 1-based column index into COLUMNS above.
 NUMBER_FORMATS = {
-    2: "#,##0",
-    3: "0.0\"%\"",
-    5: "0.00",
-    7: "#,##0",
-    8: "0.0\"%\"",
-    9: "#,##0",
-    10: "#,##0",
-    11: "0.0\"%\"",
-    12: "#,##0",
-    13: "#,##0",
+    2: "#,##0",       # NEW OUT-TAR
+    3: "0.0\"%\"",    # NEW EFF-TAR
+    5: "0.00",        # SAM
+    7: "#,##0",       # OUT-SEW
+    8: "0.0\"%\"",    # EFF-SEW
+    9: "#,##0",       # OUT-FIN(ScanPack)
+    10: "#,##0",      # OUT-FIN(Fin)
+    11: "0.0\"%\"",   # EFF-FIN
+    12: "#,##0",      # VAR
+    13: "#,##0",      # Tồn Dip
+    14: "#,##0",      # Tồn trước PI
 }
+
+EFF_SEW_COL = 8
+EFF_FIN_COL = 11
+VAR_COL = 12
+ISSUE_COL = 15
 
 
 def _line_row_values(line: LineDaySummary) -> list:
@@ -132,7 +144,8 @@ def _line_row_values(line: LineDaySummary) -> list:
         line.out_fin_fin,
         float(line.eff_fin) if line.eff_fin is not None else None,
         line.var,
-        line.wip_fin,
+        line.wip_dip,
+        line.wip_pre_pi,
         line.issue_note or "",
     ]
 
@@ -155,7 +168,8 @@ def _subtotal_row_values(label: str, items: list[LineDaySummary], sam_avg: float
         sum((i.out_fin_fin or 0) for i in items),
         _shift_weighted_avg([(i.eff_fin_weight, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
         sum((i.var or 0) for i in items),
-        sum((i.wip_fin or 0) for i in items),
+        sum((i.wip_dip or 0) for i in items),
+        sum((i.wip_pre_pi or 0) for i in items),
         "",
     ]
 
@@ -289,12 +303,12 @@ def generate_daily_excel(
                 _write_row(ws, row_idx, _line_row_values(line), number_formats=NUMBER_FORMATS)
                 eff_sew_fill = _eff_fill(float(line.eff_sew) if line.eff_sew is not None else None, float(line.target_eff))
                 if eff_sew_fill:
-                    ws.cell(row=row_idx, column=8).fill = eff_sew_fill
+                    ws.cell(row=row_idx, column=EFF_SEW_COL).fill = eff_sew_fill
                 eff_fin_fill = _eff_fill(float(line.eff_fin) if line.eff_fin is not None else None, float(line.target_eff))
                 if eff_fin_fill:
-                    ws.cell(row=row_idx, column=11).fill = eff_fin_fill
+                    ws.cell(row=row_idx, column=EFF_FIN_COL).fill = eff_fin_fill
                 if line.var is not None and line.var < 0:
-                    ws.cell(row=row_idx, column=12).font = VAR_NEGATIVE_FONT
+                    ws.cell(row=row_idx, column=VAR_COL).font = VAR_NEGATIVE_FONT
                 row_idx += 1
 
             exec_sam = _avg([float(l.sam) for l in exec_lines])
@@ -331,7 +345,7 @@ def generate_daily_excel(
     )
 
     ws.cell(row=header_row, column=1).alignment = Alignment(horizontal="center")
-    for row in ws.iter_rows(min_row=header_row, max_row=row_idx, min_col=14, max_col=14):
+    for row in ws.iter_rows(min_row=header_row, max_row=row_idx, min_col=ISSUE_COL, max_col=ISSUE_COL):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 

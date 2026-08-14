@@ -13,3 +13,7 @@ backend/.env
 
 # Local scratch
 /.claude/settings.local.json
+
+# Data exports / backups - real production numbers, and this repo is public
+/backup_*.csv
+/*.xlsx

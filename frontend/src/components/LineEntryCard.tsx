@@ -24,7 +24,8 @@ const emptyForm: DailyReportInput = {
   out_fin_scanpack: null,
   out_fin_fin: null,
   eff_fin: null,
-  wip_fin: null,
+  wip_dip: null,
+  wip_pre_pi: null,
   issue_note: "",
 };
 
@@ -98,7 +99,8 @@ export function LineEntryCard({
             out_fin_scanpack: report.out_fin_scanpack,
             out_fin_fin: report.out_fin_fin,
             eff_fin: report.eff_fin,
-            wip_fin: report.wip_fin,
+            wip_dip: report.wip_dip,
+            wip_pre_pi: report.wip_pre_pi,
             issue_note: report.issue_note ?? "",
           }
         : { ...emptyForm, shift }
@@ -297,13 +299,23 @@ export function LineEntryCard({
           />
         </div>
         <div>
-          <Label>WIP FIN</Label>
+          <Label>Tồn Dip</Label>
           <Input
             type="number"
             min={0}
             disabled={locked}
-            value={toFieldValue(form.wip_fin)}
-            onChange={(e) => setForm({ ...form, wip_fin: parseNumber(e.target.value) })}
+            value={toFieldValue(form.wip_dip)}
+            onChange={(e) => setForm({ ...form, wip_dip: parseNumber(e.target.value) })}
+          />
+        </div>
+        <div>
+          <Label>Tồn trước PI</Label>
+          <Input
+            type="number"
+            min={0}
+            disabled={locked}
+            value={toFieldValue(form.wip_pre_pi)}
+            onChange={(e) => setForm({ ...form, wip_pre_pi: parseNumber(e.target.value) })}
           />
         </div>
 
