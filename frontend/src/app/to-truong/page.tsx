@@ -22,16 +22,15 @@ function formatVietnameseDate(iso: string) {
 
 function ToTruongContent() {
   const reportDate = todayISO();
-  const [shift, setShift] = useState(1);
   const [items, setItems] = useState<LineWithReport[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
-      .myLines(reportDate, shift)
+      .myLines(reportDate)
       .then(setItems)
       .catch(() => setError("Không tải được dữ liệu, vui lòng thử lại"));
-  }, [reportDate, shift]);
+  }, [reportDate]);
 
   useEffect(() => {
     load();
@@ -44,21 +43,6 @@ function ToTruongContent() {
     <PageShell
       title="Nhập sản lượng"
       description={`${formatVietnameseDate(reportDate)} · Đã nộp ${submittedCount}/${total} line`}
-      actions={
-        <div className="flex overflow-hidden rounded-lg border border-border">
-          {[1, 2].map((s) => (
-            <button
-              key={s}
-              onClick={() => setShift(s)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                shift === s ? "bg-primary text-primary-foreground" : "bg-surface text-muted hover:bg-slate-100"
-              }`}
-            >
-              Ca {s}
-            </button>
-          ))}
-        </div>
-      }
     >
       {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
 
@@ -75,7 +59,6 @@ function ToTruongContent() {
               key={item.line.id}
               item={item}
               reportDate={reportDate}
-              shift={shift}
               onSubmitted={load}
             />
           ))}

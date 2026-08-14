@@ -23,7 +23,7 @@ from app.services.aggregation import latest_target_snapshots, resolve_line_targe
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 HISTORY_FIELDS = (
-    "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
+    "shift_count", "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
     "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note",
 )
 
@@ -42,7 +42,6 @@ def _record_history(
     *,
     line_id: int,
     report_date: date,
-    shift: int,
     action: str,
     changed_by: int,
     old: dict | None,
@@ -54,7 +53,6 @@ def _record_history(
         ReportHistory(
             line_id=line_id,
             report_date=report_date,
-            shift=shift,
             action=action,
             changed_by=changed_by,
             old_values=json.dumps(old) if old is not None else None,
@@ -100,7 +98,6 @@ def _assert_line_access(current_user: User, line: Line):
 @router.get("/my-lines", response_model=list[LineWithReportOut])
 def get_my_lines(
     report_date: date = Query(default_factory=local_today),
-    shift: int = Query(default=1, ge=1, le=2),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -116,7 +113,6 @@ def get_my_lines(
             select(DailyReport).where(
                 DailyReport.line_id.in_(line_ids),
                 DailyReport.report_date == report_date,
-                DailyReport.shift == shift,
             )
         ).all()
         reports = {r.line_id: r for r in report_rows}
@@ -150,16 +146,13 @@ def get_my_lines(
 def get_line_report(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
-    shift: int = Query(default=1, ge=1, le=2),
     db: Session = Depends(get_db),
 ):
-    """Fetch a single line/date/shift report for Thư ký/Sếp to inspect or
-    submit on behalf of a Tổ trưởng ("nhập hộ")."""
+    """Fetch a single line/date report for Thư ký/Sếp to inspect or submit on
+    behalf of a Tổ trưởng ("nhập hộ")."""
     line = _get_line_or_404(db, line_id)
     report = db.scalar(
-        select(DailyReport).where(
-            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
-        )
+        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
     sam, target_output, target_eff = resolve_line_target(db, line, report_date)
     report_out = _report_out(report, line) if report else None
@@ -178,11 +171,7 @@ def submit_report(
     _assert_line_access(current_user, line)
 
     report = db.scalar(
-        select(DailyReport).where(
-            DailyReport.line_id == line_id,
-            DailyReport.report_date == report_date,
-            DailyReport.shift == payload.shift,
-        )
+        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
 
     if report is not None:
@@ -192,12 +181,12 @@ def submit_report(
     else:
         if current_user.role == UserRole.to_truong and resolve_effective_lock(report_date, False, False):
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-        report = DailyReport(line_id=line_id, report_date=report_date, shift=payload.shift)
+        report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
 
     old_snapshot = _snapshot(report)
 
-    for field in ("buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note"):
+    for field in ("shift_count", "buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note"):
         setattr(report, field, getattr(payload, field))
 
     report.is_submitted = True
@@ -205,7 +194,7 @@ def submit_report(
     report.submitted_at = local_now().replace(tzinfo=None)
 
     _record_history(
-        db, line_id=line_id, report_date=report_date, shift=payload.shift, action="submit",
+        db, line_id=line_id, report_date=report_date, action="submit",
         changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
     )
 
@@ -219,12 +208,11 @@ def update_line_targets(
     line_id: int,
     payload: LineTargetUpdate,
     report_date: date = Query(default_factory=local_today),
-    shift: int = Query(default=1, ge=1, le=2),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Let a line's own Tổ trưởng (in addition to Thư ký/Sếp) set SAM / NEW
-    OUT-TAR / NEW EFF-TAR for a specific day's shift - these can change day to
+    OUT-TAR / NEW EFF-TAR for a specific day - these can change day to
     day (the factory re-sets them whenever the buyer/style on a line changes),
     so they are stored on that day's report row, not as a fixed Line property.
     Line.sam/target_output/target_eff is deliberately left untouched here: it
@@ -237,9 +225,7 @@ def update_line_targets(
     _assert_line_access(current_user, line)
 
     report = db.scalar(
-        select(DailyReport).where(
-            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
-        )
+        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
     if report is not None:
         effective_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
@@ -248,7 +234,7 @@ def update_line_targets(
     else:
         if current_user.role == UserRole.to_truong and resolve_effective_lock(report_date, False, False):
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-        report = DailyReport(line_id=line_id, report_date=report_date, shift=shift)
+        report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
 
     old_snapshot = _snapshot(report)
@@ -258,7 +244,7 @@ def update_line_targets(
     report.target_eff = payload.target_eff
 
     _record_history(
-        db, line_id=line_id, report_date=report_date, shift=shift, action="target_update",
+        db, line_id=line_id, report_date=report_date, action="target_update",
         changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
     )
 
@@ -270,7 +256,6 @@ def update_line_targets(
 def delete_report(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
-    shift: int = Query(default=1, ge=1, le=2),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -280,9 +265,7 @@ def delete_report(
     _assert_line_access(current_user, line)
 
     report = db.scalar(
-        select(DailyReport).where(
-            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
-        )
+        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
     if report is None:
         return
@@ -292,7 +275,7 @@ def delete_report(
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
 
     _record_history(
-        db, line_id=line_id, report_date=report_date, shift=shift, action="delete",
+        db, line_id=line_id, report_date=report_date, action="delete",
         changed_by=current_user.id, old=_snapshot(report), new=None,
     )
 
@@ -308,8 +291,8 @@ def get_report_history(
     report_date: date = Query(default_factory=local_today),
     db: Session = Depends(get_db),
 ):
-    """Every submit/target-update/delete for this line on this date (both
-    shifts), newest first - Thư ký/Sếp-only audit trail."""
+    """Every submit/target-update/delete for this line on this date, newest
+    first - Thư ký/Sếp-only audit trail."""
     rows = db.scalars(
         select(ReportHistory)
         .where(ReportHistory.line_id == line_id, ReportHistory.report_date == report_date)
@@ -346,20 +329,17 @@ def set_lock_by_line(
     line_id: int,
     payload: UnlockRequest,
     report_date: date = Query(default_factory=local_today),
-    shift: int = Query(default=1, ge=1, le=2),
     db: Session = Depends(get_db),
 ):
-    """Unlock (or lock) a line/date/shift even if Tổ trưởng has not submitted
+    """Unlock (or lock) a line/date even if Tổ trưởng has not submitted
     anything yet, so a report row may not exist. Used by Thư ký to let a Tổ
     trưởng submit late after the automatic lock hour has passed."""
     line = _get_line_or_404(db, line_id)
     report = db.scalar(
-        select(DailyReport).where(
-            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
-        )
+        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
     if report is None:
-        report = DailyReport(line_id=line_id, report_date=report_date, shift=shift)
+        report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
     report.is_locked = payload.is_locked
     report.secretary_override = True

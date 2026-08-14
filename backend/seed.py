@@ -1,6 +1,6 @@
 """Seed initial data: admin accounts, real line -> executive assignments,
-and one Tổ trưởng login per line (shared by whoever works Ca 1 or Ca 2 on
-that line - the entry form has a Ca 1 / Ca 2 tab to enter either shift).
+and one Tổ trưởng login per line (shared by whoever works the line's Ca 1 or
+Ca 2 - the entry form has a "Số ca chạy" field to report how many shifts ran).
 
 Usage: .venv/Scripts/python seed.py
 Safe to re-run: skips rows whose username/line_number already exist.

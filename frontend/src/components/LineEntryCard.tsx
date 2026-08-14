@@ -17,7 +17,7 @@ function parseNumber(v: string): number | null {
 }
 
 const emptyForm: DailyReportInput = {
-  shift: 1,
+  shift_count: 1,
   buyer: "",
   out_sew: null,
   eff_sew: null,
@@ -32,12 +32,10 @@ const emptyForm: DailyReportInput = {
 export function LineEntryCard({
   item,
   reportDate,
-  shift,
   onSubmitted,
 }: {
   item: LineWithReport;
   reportDate: string;
-  shift: number;
   onSubmitted: () => void;
 }) {
   const { line, report, is_editable } = item;
@@ -78,7 +76,7 @@ export function LineEntryCard({
     setTargetSaving(true);
     setTargetError(null);
     try {
-      await api.updateLineTargets(line.id, reportDate, shift, { sam, target_output, target_eff });
+      await api.updateLineTargets(line.id, reportDate, { sam, target_output, target_eff });
       setEditingTargets(false);
       onSubmitted();
     } catch (err) {
@@ -92,7 +90,7 @@ export function LineEntryCard({
     setForm(
       report
         ? {
-            shift,
+            shift_count: report.shift_count,
             buyer: report.buyer ?? "",
             out_sew: report.out_sew,
             eff_sew: report.eff_sew,
@@ -103,11 +101,11 @@ export function LineEntryCard({
             wip_pre_pi: report.wip_pre_pi,
             issue_note: report.issue_note ?? "",
           }
-        : { ...emptyForm, shift }
+        : { ...emptyForm }
     );
     setJustSaved(false);
     setError(null);
-  }, [report, shift]);
+  }, [report]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -128,14 +126,14 @@ export function LineEntryCard({
   const locked = !is_editable;
 
   async function handleDelete() {
-    if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} - Ca ${shift}?\nKhông thể hoàn tác.`)) {
+    if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} ngày này?\nKhông thể hoàn tác.`)) {
       return;
     }
     setDeleting(true);
     setError(null);
     try {
-      await api.deleteReport(line.id, reportDate, shift);
-      setForm({ ...emptyForm, shift });
+      await api.deleteReport(line.id, reportDate);
+      setForm({ ...emptyForm });
       onSubmitted();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Không xóa được, vui lòng thử lại");
@@ -245,6 +243,24 @@ export function LineEntryCard({
             placeholder="VD: NIKE"
             className="uppercase placeholder:normal-case"
           />
+        </div>
+        <div>
+          <Label>Số ca chạy</Label>
+          <div className="flex overflow-hidden rounded-lg border border-border">
+            {[1, 2].map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={locked}
+                onClick={() => setForm({ ...form, shift_count: s })}
+                className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  form.shift_count === s ? "bg-primary text-primary-foreground" : "bg-surface text-muted hover:bg-slate-100"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <Label>OUT-SEW (SL May+OT)</Label>

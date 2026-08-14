@@ -1,16 +1,17 @@
 """Builds the per-line / per-executive / per-PU day summary that both the
 dashboard API and the Excel export are based on, so the two stay consistent.
 
-A line can have up to 2 daily_reports rows for a given date (shift 1 and 2).
-They are combined here: quantities (OUT-*, WIP) are summed, efficiencies
-(EFF-*) are averaged across the shifts that reported a value, issue notes are
-concatenated, and SAM/target_output/target_eff come ONLY from report_date's
-own rows - falling back to the Line's static default (never auto-updated,
-only ever changed via "Cấu hình Line"), never to another date's edit. A day
-nobody has touched must show as having no data of its own, even if a later
-or earlier day does - see routers/reports.py's resolve_line_target for the
-separate, deliberately-forward-looking resolver used only to prefill the
-edit form with a convenient starting point.
+There is exactly one daily_reports row per line per date. The Tổ trưởng
+enters shift_count (the factory's "tổng số Ca") directly on that row rather
+than submitting once per shift, so no summing/averaging across rows is
+needed here - every OUT-*/EFF-*/WIP value is read straight off the row.
+SAM/target_output/target_eff come ONLY from report_date's own row - falling
+back to the Line's static default (never auto-updated, only ever changed via
+"Cấu hình Line"), never to another date's edit. A day nobody has touched
+must show as having no data of its own, even if a later or earlier day does
+- see routers/reports.py's resolve_line_target for the separate,
+deliberately-forward-looking resolver used only to prefill the edit form
+with a convenient starting point.
 """
 
 from datetime import date
@@ -28,13 +29,6 @@ def _avg(values: list[float]) -> float | None:
     if not values:
         return None
     return round(sum(values) / len(values), 2)
-
-
-def _last_non_null(values):
-    for v in reversed(values):
-        if v is not None:
-            return v
-    return None
 
 
 def latest_target_snapshots(
@@ -56,7 +50,7 @@ def latest_target_snapshots(
     )
     if line_id is not None:
         stmt = stmt.where(DailyReport.line_id == line_id)
-    stmt = stmt.order_by(DailyReport.line_id, DailyReport.report_date.desc(), DailyReport.shift.desc())
+    stmt = stmt.order_by(DailyReport.line_id, DailyReport.report_date.desc())
     rows = db.scalars(stmt).all()
     latest: dict[int, DailyReport] = {}
     for r in rows:
@@ -100,59 +94,37 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
     ).all()
     reports = db.scalars(select(DailyReport).where(DailyReport.report_date == report_date)).all()
-
-    reports_by_line: dict[int, list[DailyReport]] = {}
-    for r in reports:
-        reports_by_line.setdefault(r.line_id, []).append(r)
+    reports_by_line: dict[int, DailyReport] = {r.line_id: r for r in reports}
 
     summaries: list[LineDaySummary] = []
     for line in lines:
-        line_reports = sorted(reports_by_line.get(line.id, []), key=lambda r: r.shift)
+        report = reports_by_line.get(line.id)
 
-        out_sew = sum((r.out_sew or 0) for r in line_reports) if line_reports else None
-        out_scanpack = sum((r.out_fin_scanpack or 0) for r in line_reports) if line_reports else None
-        out_fin = sum((r.out_fin_fin or 0) for r in line_reports) if line_reports else None
-        # Stock levels, not flows: the later shift's reading already accounts
-        # for the earlier one, so take the last reported rather than summing.
-        dip_values = [r.wip_dip for r in line_reports if r.wip_dip is not None]
-        wip_dip = dip_values[-1] if dip_values else None
-        pre_pi_values = [r.wip_pre_pi for r in line_reports if r.wip_pre_pi is not None]
-        wip_pre_pi = pre_pi_values[-1] if pre_pi_values else None
-        # Each shift the line ran counts once, so a line that ran both shifts
-        # gets the plain average of the two - equivalent to the original sheet,
-        # where that line would occupy one row carrying Shift/Ca = 2.
-        eff_sew = _avg([float(r.eff_sew) for r in line_reports if r.eff_sew is not None])
-        eff_fin = _avg([float(r.eff_fin) for r in line_reports if r.eff_fin is not None])
-        issue_notes = [r.issue_note for r in line_reports if r.issue_note]
-        issue_note = " | ".join(issue_notes) if issue_notes else None
-        shift_display = "+".join(str(r.shift) for r in line_reports) if line_reports else "-"
-        shift_weight = len(line_reports)
-        eff_sew_weight = sum(1 for r in line_reports if r.eff_sew is not None)
-        eff_fin_weight = sum(1 for r in line_reports if r.eff_fin is not None)
+        eff_sew = float(report.eff_sew) if report and report.eff_sew is not None else None
+        eff_fin = float(report.eff_fin) if report and report.eff_fin is not None else None
+        # shift_count (the factory's "tổng số Ca") is the weight for EFF%
+        # averaging across lines: SUMPRODUCT(Shift, EFF%) / SUM(Shift). A line
+        # that reported no EFF value for the day is dropped from the divisor
+        # too (the original sheet's EFF-FIN subtotals divide by 11/21/53
+        # rather than the full 13/23/55).
+        shift_weight = report.shift_count if report else 0
+        shift_display = str(report.shift_count) if report else "-"
+        eff_sew_weight = shift_weight if eff_sew is not None else 0
+        eff_fin_weight = shift_weight if eff_fin is not None else 0
 
-        buyers = list(dict.fromkeys(r.buyer for r in line_reports if r.buyer))
-        buyer = " / ".join(buyers) if buyers else None
-
-        # Only report_date's own rows count - no history lookback here (see
+        # Only report_date's own row counts - no history lookback here (see
         # module docstring). A line nobody touched today falls back to the
         # Line's static admin-configured default, not to a past day's edit.
-        sam = _last_non_null([float(r.sam) if r.sam is not None else None for r in line_reports])
-        if sam is None:
-            sam = float(line.sam)
-        target_output = _last_non_null([r.target_output for r in line_reports])
-        if target_output is None:
-            target_output = line.target_output
-        target_eff = _last_non_null([float(r.target_eff) if r.target_eff is not None else None for r in line_reports])
-        if target_eff is None:
-            target_eff = float(line.target_eff)
+        sam = float(report.sam) if report and report.sam is not None else float(line.sam)
+        target_output = report.target_output if report and report.target_output is not None else line.target_output
+        target_eff = float(report.target_eff) if report and report.target_eff is not None else float(line.target_eff)
 
-        is_submitted = any(r.is_submitted for r in line_reports)
-        if line_reports:
-            is_locked = all(
-                resolve_effective_lock(r.report_date, r.is_locked, r.secretary_override) for r in line_reports
-            )
-        else:
-            is_locked = resolve_effective_lock(report_date, False, False)
+        out_fin = report.out_fin_fin if report else None
+        is_locked = (
+            resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+            if report
+            else resolve_effective_lock(report_date, False, False)
+        )
 
         # target_output == 0 means the line has never had a real target
         # configured - skip the comparison rather than showing a bogus VAR.
@@ -164,7 +136,7 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 line_number=line.line_number,
                 executive_name=line.executive_name,
                 pu_group=line.pu_group,
-                buyer=buyer,
+                buyer=report.buyer if report else None,
                 sam=sam,
                 target_output=target_output,
                 target_eff=target_eff,
@@ -172,16 +144,16 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 shift_weight=shift_weight,
                 eff_sew_weight=eff_sew_weight,
                 eff_fin_weight=eff_fin_weight,
-                out_sew=out_sew,
+                out_sew=report.out_sew if report else None,
                 eff_sew=eff_sew,
-                out_fin_scanpack=out_scanpack,
+                out_fin_scanpack=report.out_fin_scanpack if report else None,
                 out_fin_fin=out_fin,
                 eff_fin=eff_fin,
                 var=var,
-                wip_dip=wip_dip,
-                wip_pre_pi=wip_pre_pi,
-                issue_note=issue_note,
-                is_submitted=is_submitted,
+                wip_dip=report.wip_dip if report else None,
+                wip_pre_pi=report.wip_pre_pi if report else None,
+                issue_note=report.issue_note if report else None,
+                is_submitted=report.is_submitted if report else False,
                 is_locked=is_locked,
             )
         )

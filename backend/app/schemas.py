@@ -92,7 +92,7 @@ class LineTargetUpdate(BaseModel):
 
 # ---------- Daily reports ----------
 class DailyReportInput(BaseModel):
-    shift: int = Field(ge=1, le=2)
+    shift_count: int = Field(ge=1, le=2)
     buyer: str = Field(min_length=1)
     out_sew: int | None = Field(default=None, ge=0)
     eff_sew: float | None = Field(default=None, ge=0)
@@ -117,7 +117,7 @@ class DailyReportOut(BaseModel):
     id: int
     line_id: int
     report_date: date
-    shift: int
+    shift_count: int
     buyer: str | None
     out_sew: int | None
     eff_sew: float | None

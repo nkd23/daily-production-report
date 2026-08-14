@@ -86,10 +86,10 @@ export const api = {
     request<Line>(`/api/lines/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deactivateLine: (id: number) => request<void>(`/api/lines/${id}`, { method: "DELETE" }),
 
-  myLines: (reportDate: string, shift: number) =>
-    request<LineWithReport[]>(`/api/reports/my-lines?report_date=${reportDate}&shift=${shift}`),
-  getLineReport: (lineId: number, reportDate: string, shift: number) =>
-    request<LineWithReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}&shift=${shift}`),
+  myLines: (reportDate: string) =>
+    request<LineWithReport[]>(`/api/reports/my-lines?report_date=${reportDate}`),
+  getLineReport: (lineId: number, reportDate: string) =>
+    request<LineWithReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}`),
   submitReport: (lineId: number, reportDate: string, payload: DailyReportInput) =>
     request<DailyReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}`, {
       method: "POST",
@@ -98,16 +98,15 @@ export const api = {
   updateLineTargets: (
     lineId: number,
     reportDate: string,
-    shift: number,
     payload: { sam: number; target_output: number; target_eff: number }
   ) =>
-    request<Line>(`/api/reports/lines/${lineId}/targets?report_date=${reportDate}&shift=${shift}`, {
+    request<Line>(`/api/reports/lines/${lineId}/targets?report_date=${reportDate}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  setLockByLine: (lineId: number, reportDate: string, shift: number, isLocked: boolean) =>
+  setLockByLine: (lineId: number, reportDate: string, isLocked: boolean) =>
     request<DailyReport>(
-      `/api/reports/lines/${lineId}/lock?report_date=${reportDate}&shift=${shift}`,
+      `/api/reports/lines/${lineId}/lock?report_date=${reportDate}`,
       { method: "PATCH", body: JSON.stringify({ is_locked: isLocked }) }
     ),
   setLockById: (reportId: number, isLocked: boolean) =>
@@ -115,8 +114,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ is_locked: isLocked }),
     }),
-  deleteReport: (lineId: number, reportDate: string, shift: number) =>
-    request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}&shift=${shift}`, { method: "DELETE" }),
+  deleteReport: (lineId: number, reportDate: string) =>
+    request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}`, { method: "DELETE" }),
   getReportHistory: (lineId: number, reportDate: string) =>
     request<ReportHistoryEntry[]>(`/api/reports/lines/${lineId}/history?report_date=${reportDate}`),
 

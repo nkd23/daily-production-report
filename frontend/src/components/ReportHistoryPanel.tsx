@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import type { ReportHistoryEntry, ReportHistoryValues } from "@/lib/types";
 
 const FIELD_LABELS: Record<keyof ReportHistoryValues, string> = {
+  shift_count: "Số ca chạy",
   buyer: "Buyer",
   sam: "SAM",
   target_output: "Target sản lượng",

@@ -27,7 +27,7 @@ export interface DailyReport {
   id: number;
   line_id: number;
   report_date: string;
-  shift: number;
+  shift_count: number;
   buyer: string | null;
   out_sew: number | null;
   eff_sew: number | null;
@@ -50,7 +50,7 @@ export interface LineWithReport {
 }
 
 export interface DailyReportInput {
-  shift: number;
+  shift_count: number;
   buyer: string;
   out_sew: number | null;
   eff_sew: number | null;
@@ -148,6 +148,7 @@ export interface DashboardResponse {
 export type ReportHistoryAction = "submit" | "target_update" | "delete";
 
 export interface ReportHistoryValues {
+  shift_count: number | null;
   buyer: string | null;
   sam: number | null;
   target_output: number | null;

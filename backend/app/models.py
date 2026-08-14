@@ -60,8 +60,8 @@ class Line(Base):
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
-    # One Tổ trưởng account per line, used for both shifts - the entry form
-    # has a Ca 1 / Ca 2 tab so the same person can log data for either shift.
+    # One Tổ trưởng account per line - the entry form has a "Số ca chạy" field
+    # so the same person reports however many shifts (1 or 2) the line ran.
     to_truong_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -74,12 +74,17 @@ class Line(Base):
 
 class DailyReport(Base):
     __tablename__ = "daily_reports"
-    __table_args__ = (UniqueConstraint("line_id", "report_date", "shift", name="uq_line_date_shift"),)
+    __table_args__ = (UniqueConstraint("line_id", "report_date", name="uq_line_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False)
     report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
-    shift: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    # How many shifts (1 or 2) the line ran this day - the factory's "tổng số
+    # Ca" column, entered directly by the Tổ trưởng rather than inferred from
+    # how many separate submissions exist (there is only ever one row per
+    # line/date; see app.services.aggregation for how this is used as a
+    # weight when averaging EFF% across lines).
+    shift_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
 
     # Buyer/style the line is currently running - entered by Tổ trưởng each
     # submission (can change day to day on the same line), not a fixed Line
@@ -127,10 +132,10 @@ class DailyReport(Base):
 class ReportHistory(Base):
     """Audit trail for daily_reports changes - Thư ký/Sếp-only. Not linked by
     foreign key to daily_reports.id because a "Xóa & nhập lại" delete removes
-    that row entirely; line_id/report_date/shift are stored directly instead
-    so the trail survives the row it describes. old_values/new_values are a
-    JSON snapshot of every report field, taken before and after each action,
-    so the full before/after picture is visible without needing to know in
+    that row entirely; line_id/report_date are stored directly instead so the
+    trail survives the row it describes. old_values/new_values are a JSON
+    snapshot of every report field, taken before and after each action, so
+    the full before/after picture is visible without needing to know in
     advance which fields a given action could touch."""
 
     __tablename__ = "report_history"
@@ -138,7 +143,6 @@ class ReportHistory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False, index=True)
     report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
-    shift: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     action: Mapped[str] = mapped_column(Unicode(20), nullable=False)  # "submit" | "target_update" | "delete"
     changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     changed_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())

@@ -10,7 +10,6 @@ import type { LineDaySummary, LineWithReport } from "@/lib/types";
 
 export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: LineDaySummary; reportDate: string; onChanged: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const [shift, setShift] = useState(1);
   const [detail, setDetail] = useState<LineWithReport | null>(null);
   const [lockLoading, setLockLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -18,15 +17,15 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
   useEffect(() => {
     if (!expanded) return;
     setDetail(null);
-    api.getLineReport(summary.line_id, reportDate, shift).then(setDetail);
-  }, [expanded, shift, summary.line_id, reportDate]);
+    api.getLineReport(summary.line_id, reportDate).then(setDetail);
+  }, [expanded, summary.line_id, reportDate]);
 
   async function toggleLock() {
     setLockLoading(true);
     try {
       const nextLocked = !(detail?.report?.is_locked ?? summary.is_locked);
-      await api.setLockByLine(summary.line_id, reportDate, shift, nextLocked);
-      const refreshed = await api.getLineReport(summary.line_id, reportDate, shift);
+      await api.setLockByLine(summary.line_id, reportDate, nextLocked);
+      const refreshed = await api.getLineReport(summary.line_id, reportDate);
       setDetail(refreshed);
       onChanged();
     } finally {
@@ -79,27 +78,14 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
         <tr className="border-b border-border bg-surface-muted/40">
           <td colSpan={9} className="p-4">
             <div className="mb-3 flex flex-wrap items-center gap-3">
-              <div className="flex overflow-hidden rounded-lg border border-border">
-                {[1, 2].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setShift(s)}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      shift === s ? "bg-primary text-primary-foreground" : "bg-surface text-muted hover:bg-slate-100"
-                    }`}
-                  >
-                    Ca {s}
-                  </button>
-                ))}
-              </div>
               <Button variant={detail?.report?.is_locked ?? summary.is_locked ? "primary" : "secondary"} size="sm" disabled={lockLoading} onClick={toggleLock}>
                 {detail?.report?.is_locked ?? summary.is_locked ? (
                   <>
-                    <LockOpen size={14} /> Mở khoá Ca {shift}
+                    <LockOpen size={14} /> Mở khoá
                   </>
                 ) : (
                   <>
-                    <Lock size={14} /> Khoá lại Ca {shift}
+                    <Lock size={14} /> Khoá lại
                   </>
                 )}
               </Button>
@@ -112,10 +98,9 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
               <LineEntryCard
                 item={detail}
                 reportDate={reportDate}
-                shift={shift}
                 onSubmitted={() => {
                   onChanged();
-                  api.getLineReport(summary.line_id, reportDate, shift).then(setDetail);
+                  api.getLineReport(summary.line_id, reportDate).then(setDetail);
                 }}
               />
             ) : (
