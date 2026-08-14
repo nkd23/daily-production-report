@@ -77,7 +77,7 @@ export function LineEntryCard({
     setTargetSaving(true);
     setTargetError(null);
     try {
-      await api.updateLineTargets(line.id, { sam, target_output, target_eff });
+      await api.updateLineTargets(line.id, reportDate, shift, { sam, target_output, target_eff });
       setEditingTargets(false);
       onSubmitted();
     } catch (err) {

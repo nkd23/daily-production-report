@@ -80,8 +80,10 @@ class LineOut(LineBase):
 
 
 class LineTargetUpdate(BaseModel):
-    """SAM / NEW OUT-TAR / NEW EFF-TAR, updated by whoever just came out of the
-    weekly meeting with Sếp (Thư ký, Sếp, or the Tổ trưởng of that line)."""
+    """SAM / NEW OUT-TAR / NEW EFF-TAR for one day's report - these can change
+    day to day (SAM tracks whatever buyer/style is currently running), entered
+    by whoever knows the current numbers (Thư ký, Sếp, or the Tổ trưởng of
+    that line)."""
 
     sam: float = Field(gt=0)
     target_output: int = Field(gt=0)

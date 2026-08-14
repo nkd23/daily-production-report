@@ -51,6 +51,12 @@ class Line(Base):
     line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
     executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
+    # Bootstrap-only default SAM/target, used solely for a line that has never
+    # had a value entered on any daily_reports row. Deliberately NOT kept in
+    # sync with the latest edit - app.services.aggregation.resolve_line_target
+    # resolves the real per-day value from report history, and updating this
+    # field on every edit would make a later edit "leak" into earlier,
+    # unreported dates that fall back to it.
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
@@ -79,6 +85,15 @@ class DailyReport(Base):
     # submission (can change day to day on the same line), not a fixed Line
     # attribute. Always stored upper-case.
     buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    # SAM / target output / target EFF as they stood on this specific day -
+    # the factory's sheet shows these changing daily (SAM tracks whatever
+    # style/buyer is running), not just weekly. Nullable because most report
+    # rows are only ever touched via the OUT-SEW/EFF-SEW submission and never
+    # via the "Cập nhật SAM/Target" edit; when null, callers fall back to the
+    # Line's last-known default (see app.services.aggregation).
+    sam: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    target_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_eff: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     out_sew: Mapped[int | None] = mapped_column(Integer, nullable=True)
     eff_sew: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     out_fin_scanpack: Mapped[int | None] = mapped_column(Integer, nullable=True)

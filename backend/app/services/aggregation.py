@@ -3,8 +3,10 @@ dashboard API and the Excel export are based on, so the two stay consistent.
 
 A line can have up to 2 daily_reports rows for a given date (shift 1 and 2).
 They are combined here: quantities (OUT-*, WIP) are summed, efficiencies
-(EFF-*) are averaged across the shifts that reported a value, and issue notes
-are concatenated.
+(EFF-*) are averaged across the shifts that reported a value, issue notes are
+concatenated, and SAM/target_output/target_eff are resolved as of that date
+from report history (see latest_target_snapshots), falling back to the
+Line's default only for a line that has never had a target/SAM entered.
 """
 
 from datetime import date
@@ -22,6 +24,43 @@ def _avg(values: list[float]) -> float | None:
     if not values:
         return None
     return round(sum(values) / len(values), 2)
+
+
+def latest_target_snapshots(
+    db: Session, report_date: date, line_id: int | None = None
+) -> dict[int, DailyReport]:
+    """Latest report row, as of report_date, that had its SAM/target explicitly
+    set - keyed by line_id. This is the source of truth for a line's SAM/
+    target_output/target_eff on a given day (they can change any day the
+    buyer/style on a line changes), NOT the Line's own field, which only holds
+    whatever was most recently edited overall and would incorrectly "leak"
+    into how earlier, unreported days are displayed.
+
+    Pass line_id to scope the query to a single line (used by routers/reports.py
+    for one-line views); omitted, it resolves every line in one query (used by
+    build_line_summaries below).
+    """
+    stmt = select(DailyReport).where(
+        DailyReport.report_date <= report_date, DailyReport.target_output.is_not(None)
+    )
+    if line_id is not None:
+        stmt = stmt.where(DailyReport.line_id == line_id)
+    stmt = stmt.order_by(DailyReport.line_id, DailyReport.report_date.desc(), DailyReport.shift.desc())
+    rows = db.scalars(stmt).all()
+    latest: dict[int, DailyReport] = {}
+    for r in rows:
+        latest.setdefault(r.line_id, r)
+    return latest
+
+
+def resolve_line_target(db: Session, line: Line, report_date: date) -> tuple[float, int, float]:
+    """SAM/target_output/target_eff as they stood on report_date - see
+    latest_target_snapshots. Used by routers/reports.py to show a Tổ trưởng
+    the right day's numbers instead of the Line's ever-changing "current" value."""
+    snapshot = latest_target_snapshots(db, report_date, line_id=line.id).get(line.id)
+    if snapshot is not None:
+        return float(snapshot.sam), snapshot.target_output, float(snapshot.target_eff)
+    return float(line.sam), line.target_output, float(line.target_eff)
 
 
 def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float | None:
@@ -55,6 +94,8 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
     for r in reports:
         reports_by_line.setdefault(r.line_id, []).append(r)
 
+    target_snapshots = latest_target_snapshots(db, report_date)
+
     summaries: list[LineDaySummary] = []
     for line in lines:
         line_reports = sorted(reports_by_line.get(line.id, []), key=lambda r: r.shift)
@@ -79,6 +120,16 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         buyers = list(dict.fromkeys(r.buyer for r in line_reports if r.buyer))
         buyer = " / ".join(buyers) if buyers else None
 
+        snapshot = target_snapshots.get(line.id)
+        if snapshot is not None:
+            sam = float(snapshot.sam)
+            target_output = snapshot.target_output
+            target_eff = float(snapshot.target_eff)
+        else:
+            sam = float(line.sam)
+            target_output = line.target_output
+            target_eff = float(line.target_eff)
+
         is_submitted = any(r.is_submitted for r in line_reports)
         if line_reports:
             is_locked = all(
@@ -87,10 +138,9 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         else:
             is_locked = resolve_effective_lock(report_date, False, False)
 
-        # target_output == 0 means the line hasn't been configured with a real
-        # target yet (management supplies NEW OUT-TAR/NEW EFF-TAR weekly, on
-        # Mondays) - skip the comparison rather than showing a bogus VAR.
-        var = (out_fin - line.target_output) if out_fin is not None and line.target_output else None
+        # target_output == 0 means the line has never had a real target
+        # configured - skip the comparison rather than showing a bogus VAR.
+        var = (out_fin - target_output) if out_fin is not None and target_output else None
 
         summaries.append(
             LineDaySummary(
@@ -99,9 +149,9 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 executive_name=line.executive_name,
                 pu_group=line.pu_group,
                 buyer=buyer,
-                sam=float(line.sam),
-                target_output=line.target_output,
-                target_eff=float(line.target_eff),
+                sam=sam,
+                target_output=target_output,
+                target_eff=target_eff,
                 shift_display=shift_display,
                 shift_weight=shift_weight,
                 eff_sew_weight=eff_sew_weight,

@@ -7,21 +7,26 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
 from app.models import DailyReport, Line, User, UserRole
-from app.schemas import DailyReportInput, DailyReportOut, LineOut, LineWithReportOut, UnlockRequest
+from app.schemas import DailyReportInput, DailyReportOut, LineOut, LineTargetUpdate, LineWithReportOut, UnlockRequest
+from app.services.aggregation import latest_target_snapshots, resolve_line_target
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
-def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
+def _report_out(report: DailyReport, target_output: int) -> DailyReportOut:
     out = DailyReportOut.model_validate(report)
     out.is_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-    out.var = (report.out_fin_fin - line.target_output) if report.out_fin_fin is not None else None
+    out.var = (report.out_fin_fin - target_output) if report.out_fin_fin is not None and target_output else None
     return out
 
 
-def _line_out(line: Line) -> LineOut:
+def _line_out(line: Line, sam: float, target_output: int, target_eff: float) -> LineOut:
+    """LineOut with sam/target_output/target_eff overridden to whatever was
+    resolved as true on the report_date in question - SAM/target can change
+    day to day, so the Line's own field is only a fallback default."""
     out = LineOut.model_validate(line)
     out.to_truong_name = line.to_truong.full_name if line.to_truong else None
+    out.sam, out.target_output, out.target_eff = sam, target_output, target_eff
     return out
 
 
@@ -61,16 +66,28 @@ def get_my_lines(
         ).all()
         reports = {r.line_id: r for r in report_rows}
 
+    target_snapshots = latest_target_snapshots(db, report_date)
+
     result = []
     for line in lines:
+        snapshot = target_snapshots.get(line.id)
+        if snapshot is not None:
+            sam, target_output, target_eff = float(snapshot.sam), snapshot.target_output, float(snapshot.target_eff)
+        else:
+            sam, target_output, target_eff = float(line.sam), line.target_output, float(line.target_eff)
+
         report = reports.get(line.id)
         if report is not None:
-            report_out = _report_out(report, line)
+            report_out = _report_out(report, target_output)
             is_editable = current_user.role != UserRole.to_truong or not report_out.is_locked
         else:
             report_out = None
             is_editable = current_user.role != UserRole.to_truong or not resolve_effective_lock(report_date, False, False)
-        result.append(LineWithReportOut(line=_line_out(line), report=report_out, is_editable=is_editable))
+        result.append(
+            LineWithReportOut(
+                line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=is_editable
+            )
+        )
     return result
 
 
@@ -89,8 +106,9 @@ def get_line_report(
             DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
         )
     )
-    report_out = _report_out(report, line) if report else None
-    return LineWithReportOut(line=_line_out(line), report=report_out, is_editable=True)
+    sam, target_output, target_eff = resolve_line_target(db, line, report_date)
+    report_out = _report_out(report, target_output) if report else None
+    return LineWithReportOut(line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=True)
 
 
 @router.post("/lines/{line_id}", response_model=DailyReportOut)
@@ -131,7 +149,53 @@ def submit_report(
 
     db.commit()
     db.refresh(report)
-    return _report_out(report, line)
+    _, target_output, _ = resolve_line_target(db, line, report_date)
+    return _report_out(report, target_output)
+
+
+@router.patch("/lines/{line_id}/targets", response_model=LineOut)
+def update_line_targets(
+    line_id: int,
+    payload: LineTargetUpdate,
+    report_date: date = Query(default_factory=local_today),
+    shift: int = Query(default=1, ge=1, le=2),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Let a line's own Tổ trưởng (in addition to Thư ký/Sếp) set SAM / NEW
+    OUT-TAR / NEW EFF-TAR for a specific day's shift - these can change day to
+    day (the factory re-sets them whenever the buyer/style on a line changes),
+    so they are stored on that day's report row, not as a fixed Line property.
+    Line.sam/target_output/target_eff is deliberately left untouched here: it
+    is only ever a bootstrap default for a line that has no history at all, and
+    mutating it on every edit would make it "leak" into how earlier dates with
+    no report of their own are displayed (they resolve via report history, see
+    app.services.aggregation.resolve_line_target - not via the Line's field).
+    """
+    line = _get_line_or_404(db, line_id)
+    _assert_line_access(current_user, line)
+
+    report = db.scalar(
+        select(DailyReport).where(
+            DailyReport.line_id == line_id, DailyReport.report_date == report_date, DailyReport.shift == shift
+        )
+    )
+    if report is not None:
+        effective_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+        if current_user.role == UserRole.to_truong and effective_locked:
+            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
+    else:
+        if current_user.role == UserRole.to_truong and resolve_effective_lock(report_date, False, False):
+            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
+        report = DailyReport(line_id=line_id, report_date=report_date, shift=shift)
+        db.add(report)
+
+    report.sam = payload.sam
+    report.target_output = payload.target_output
+    report.target_eff = payload.target_eff
+
+    db.commit()
+    return _line_out(line, payload.sam, payload.target_output, payload.target_eff)
 
 
 @router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -173,7 +237,8 @@ def set_lock(report_id: int, payload: UnlockRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(report)
     line = _get_line_or_404(db, report.line_id)
-    return _report_out(report, line)
+    _, target_output, _ = resolve_line_target(db, line, report.report_date)
+    return _report_out(report, target_output)
 
 
 @router.patch("/lines/{line_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
@@ -200,4 +265,5 @@ def set_lock_by_line(
     report.secretary_override = True
     db.commit()
     db.refresh(report)
-    return _report_out(report, line)
+    _, target_output, _ = resolve_line_target(db, line, report_date)
+    return _report_out(report, target_output)
