@@ -70,6 +70,9 @@ export interface LineDaySummary {
   target_output: number;
   target_eff: number;
   shift_display: string;
+  shift_weight: number;
+  eff_sew_weight: number;
+  eff_fin_weight: number;
   out_sew: number | null;
   eff_sew: number | null;
   out_fin_scanpack: number | null;
@@ -99,6 +102,7 @@ export interface GroupSummary {
   target_eff_avg: number | null;
   sam_avg: number | null;
   line_count: number;
+  shift_total: number;
   out_sew: number;
   eff_sew_avg: number | null;
   out_fin_scanpack: number;

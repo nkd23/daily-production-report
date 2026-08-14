@@ -60,9 +60,9 @@ def _avg(values: list[float]) -> float | None:
 
 
 def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float | None:
-    """Weighted average of EFF%, weighted by Shift/Ca value. Matches
-    app.services.aggregation._shift_weighted_avg (keep in sync) and the
-    factory's original spreadsheet formula: SUMPRODUCT(Shift, EFF%) / SUM(Shift)."""
+    """Weighted average of a percentage, weighted by how many shifts each line
+    ran. Matches app.services.aggregation._shift_weighted_avg (keep in sync)
+    and the original sheet: SUMPRODUCT(Shift, EFF%) / SUM(Shift)."""
     total_weight = 0.0
     total_weighted = 0.0
     for weight, eff in pairs:
@@ -137,20 +137,23 @@ def _line_row_values(line: LineDaySummary) -> list:
     ]
 
 
-def _subtotal_row_values(label: str, items: list[LineDaySummary]) -> list:
+def _subtotal_row_values(label: str, items: list[LineDaySummary], sam_avg: float | None) -> list:
+    """Mirrors app.services.aggregation._build_group_summary - keep in sync.
+    SAM is passed in because the original sheet cascades it from the level
+    below rather than recomputing it from the raw lines."""
     target_output_sum = sum(i.target_output for i in items)
     return [
         label,
         target_output_sum or None,
-        _avg([float(i.target_eff) for i in items if i.target_eff]),
+        _shift_weighted_avg([(i.shift_weight, float(i.target_eff)) for i in items if i.target_eff]),
         "",
-        "",
-        "",
+        sam_avg,
+        sum(i.shift_weight for i in items) or "",
         sum((i.out_sew or 0) for i in items),
-        _shift_weighted_avg([(i.shift_weight, float(i.eff_sew) if i.eff_sew is not None else None) for i in items]),
+        _shift_weighted_avg([(i.eff_sew_weight, float(i.eff_sew) if i.eff_sew is not None else None) for i in items]),
         sum((i.out_fin_scanpack or 0) for i in items),
         sum((i.out_fin_fin or 0) for i in items),
-        _shift_weighted_avg([(i.shift_weight, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
+        _shift_weighted_avg([(i.eff_fin_weight, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
         sum((i.var or 0) for i in items),
         sum((i.wip_fin or 0) for i in items),
         "",
@@ -273,12 +276,14 @@ def generate_daily_excel(
     for line in lines:
         lines_by_pu.setdefault(line.pu_group.value, []).append(line)
 
+    pu_sams: list[float | None] = []
     for pu_group in sorted(lines_by_pu.keys()):
         pu_lines = lines_by_pu[pu_group]
         lines_by_exec: dict[str, list[LineDaySummary]] = {}
         for line in pu_lines:
             lines_by_exec.setdefault(line.executive_name, []).append(line)
 
+        exec_sams: list[float | None] = []
         for executive_name, exec_lines in lines_by_exec.items():
             for line in exec_lines:
                 _write_row(ws, row_idx, _line_row_values(line), number_formats=NUMBER_FORMATS)
@@ -292,20 +297,24 @@ def generate_daily_excel(
                     ws.cell(row=row_idx, column=12).font = VAR_NEGATIVE_FONT
                 row_idx += 1
 
+            exec_sam = _avg([float(l.sam) for l in exec_lines])
+            exec_sams.append(exec_sam)
             _write_row(
                 ws,
                 row_idx,
-                _subtotal_row_values(f"{executive_name} - TTL", exec_lines),
+                _subtotal_row_values(f"{executive_name} - TTL", exec_lines, exec_sam),
                 fill=EXEC_FILL,
                 bold=True,
                 number_formats=NUMBER_FORMATS,
             )
             row_idx += 1
 
+        pu_sam = _avg(exec_sams)
+        pu_sams.append(pu_sam)
         _write_row(
             ws,
             row_idx,
-            _subtotal_row_values(f"{pu_group} - TTL", pu_lines),
+            _subtotal_row_values(f"{pu_group} - TTL", pu_lines, pu_sam),
             fill=PU_FILL,
             bold=True,
             number_formats=NUMBER_FORMATS,
@@ -315,7 +324,7 @@ def generate_daily_excel(
     _write_row(
         ws,
         row_idx,
-        _subtotal_row_values("TTL", lines),
+        _subtotal_row_values("TTL", lines, _avg(pu_sams)),
         fill=TTL_FILL,
         font=TTL_FONT,
         number_formats=NUMBER_FORMATS,

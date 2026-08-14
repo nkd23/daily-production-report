@@ -25,9 +25,13 @@ def _avg(values: list[float]) -> float | None:
 
 
 def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float | None:
-    """Weighted average of EFF%, weighted by Shift/Ca value (1, 2, or a sum
-    like 1+2=3 for a line that reported both shifts) - matches the factory's
-    original spreadsheet formula: SUMPRODUCT(Shift, EFF%) / SUM(Shift).
+    """Weighted average of a percentage, weighted by how many shifts each line
+    ran - the factory's original formula: SUMPRODUCT(Shift, EFF%) / SUM(Shift).
+
+    Lines with no value are dropped from the divisor as well as the numerator,
+    which is what the original sheet does by hand (its EFF-FIN subtotals divide
+    by 11/21/53 rather than the full 13/23/55, excluding the shifts of the one
+    line that reported no EFF-FIN that day).
     """
     total_weight = 0.0
     total_weighted = 0.0
@@ -60,12 +64,17 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         out_fin = sum((r.out_fin_fin or 0) for r in line_reports) if line_reports else None
         wip_values = [r.wip_fin for r in line_reports if r.wip_fin is not None]
         wip_fin = wip_values[-1] if wip_values else None
-        eff_sew = _shift_weighted_avg([(r.shift, float(r.eff_sew) if r.eff_sew is not None else None) for r in line_reports])
-        eff_fin = _shift_weighted_avg([(r.shift, float(r.eff_fin) if r.eff_fin is not None else None) for r in line_reports])
+        # Each shift the line ran counts once, so a line that ran both shifts
+        # gets the plain average of the two - equivalent to the original sheet,
+        # where that line would occupy one row carrying Shift/Ca = 2.
+        eff_sew = _avg([float(r.eff_sew) for r in line_reports if r.eff_sew is not None])
+        eff_fin = _avg([float(r.eff_fin) for r in line_reports if r.eff_fin is not None])
         issue_notes = [r.issue_note for r in line_reports if r.issue_note]
         issue_note = " | ".join(issue_notes) if issue_notes else None
         shift_display = "+".join(str(r.shift) for r in line_reports) if line_reports else "-"
-        shift_weight = sum(r.shift for r in line_reports) if line_reports else 0
+        shift_weight = len(line_reports)
+        eff_sew_weight = sum(1 for r in line_reports if r.eff_sew is not None)
+        eff_fin_weight = sum(1 for r in line_reports if r.eff_fin is not None)
 
         buyers = list(dict.fromkeys(r.buyer for r in line_reports if r.buyer))
         buyer = " / ".join(buyers) if buyers else None
@@ -95,6 +104,8 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 target_eff=float(line.target_eff),
                 shift_display=shift_display,
                 shift_weight=shift_weight,
+                eff_sew_weight=eff_sew_weight,
+                eff_fin_weight=eff_fin_weight,
                 out_sew=out_sew,
                 eff_sew=eff_sew,
                 out_fin_scanpack=out_scanpack,
@@ -124,27 +135,34 @@ def build_executive_summaries(lines: list[LineDaySummary]) -> list[ExecutiveSumm
                 pu_group=pu_group,
                 target_output=sum(i.target_output for i in items),
                 out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
-                eff_fin_avg=_shift_weighted_avg([(i.shift_weight, i.eff_fin) for i in items]),
-                eff_sew_avg=_shift_weighted_avg([(i.shift_weight, i.eff_sew) for i in items]),
+                eff_fin_avg=_shift_weighted_avg([(i.eff_fin_weight, i.eff_fin) for i in items]),
+                eff_sew_avg=_shift_weighted_avg([(i.eff_sew_weight, i.eff_sew) for i in items]),
                 var=sum((i.var or 0) for i in items),
             )
         )
     return result
 
 
-def _build_group_summary(label: str, level: str, items: list[LineDaySummary]) -> GroupSummary:
+def _build_group_summary(
+    label: str, level: str, items: list[LineDaySummary], sam_avg: float | None
+) -> GroupSummary:
+    """Every column here is recomputed from the raw lines, exactly as the
+    original sheet's subtotal rows do - except SAM, which the sheet averages
+    from the level below instead (see build_summary_table), so it is passed in.
+    """
     return GroupSummary(
         label=label,
         level=level,
         target_output=sum(i.target_output for i in items),
-        target_eff_avg=_avg([i.target_eff for i in items if i.target_eff]),
-        sam_avg=_avg([i.sam for i in items]),
+        target_eff_avg=_shift_weighted_avg([(i.shift_weight, i.target_eff) for i in items if i.target_eff]),
+        sam_avg=sam_avg,
         line_count=len(items),
+        shift_total=sum(i.shift_weight for i in items),
         out_sew=sum((i.out_sew or 0) for i in items),
-        eff_sew_avg=_shift_weighted_avg([(i.shift_weight, i.eff_sew) for i in items]),
+        eff_sew_avg=_shift_weighted_avg([(i.eff_sew_weight, i.eff_sew) for i in items]),
         out_fin_scanpack=sum((i.out_fin_scanpack or 0) for i in items),
         out_fin_fin=sum((i.out_fin_fin or 0) for i in items),
-        eff_fin_avg=_shift_weighted_avg([(i.shift_weight, i.eff_fin) for i in items]),
+        eff_fin_avg=_shift_weighted_avg([(i.eff_fin_weight, i.eff_fin) for i in items]),
         var=sum((i.var or 0) for i in items),
         wip_fin=sum((i.wip_fin or 0) for i in items),
     )
@@ -152,7 +170,14 @@ def _build_group_summary(label: str, level: str, items: list[LineDaySummary]) ->
 
 def build_summary_table(lines: list[LineDaySummary]) -> list[GroupSummary]:
     """Executive -> PU subtotal -> TTL rows, in the same reading order as the
-    Excel export, built only from lines that have actually submitted data."""
+    Excel export, built only from lines that have actually submitted data.
+
+    SAM cascades rather than being recomputed: the original sheet averages the
+    lines for an Executive row, then averages the *Executive rows* for a PU row,
+    then the *PU rows* for TTL. That is not the same as a flat average over all
+    lines (it weighs a 6-line group the same as a 10-line one), but it is what
+    the factory's report shows, so it is reproduced deliberately.
+    """
     submitted = [l for l in lines if l.is_submitted]
 
     lines_by_pu: dict[str, list[LineDaySummary]] = {}
@@ -160,17 +185,31 @@ def build_summary_table(lines: list[LineDaySummary]) -> list[GroupSummary]:
         lines_by_pu.setdefault(l.pu_group.value, []).append(l)
 
     result: list[GroupSummary] = []
+    pu_rows: list[GroupSummary] = []
     for pu in sorted(lines_by_pu.keys()):
         pu_lines = lines_by_pu[pu]
         lines_by_exec: dict[str, list[LineDaySummary]] = {}
         for l in pu_lines:
             lines_by_exec.setdefault(l.executive_name, []).append(l)
+
+        exec_rows: list[GroupSummary] = []
         for executive_name, exec_lines in lines_by_exec.items():
-            result.append(_build_group_summary(executive_name, "executive", exec_lines))
-        result.append(_build_group_summary(f"{pu} - TTL", "pu", pu_lines))
+            row = _build_group_summary(
+                executive_name, "executive", exec_lines, sam_avg=_avg([l.sam for l in exec_lines])
+            )
+            exec_rows.append(row)
+            result.append(row)
+
+        pu_row = _build_group_summary(
+            f"{pu} - TTL", "pu", pu_lines, sam_avg=_avg([r.sam_avg for r in exec_rows])
+        )
+        pu_rows.append(pu_row)
+        result.append(pu_row)
 
     if submitted:
-        result.append(_build_group_summary("TTL", "ttl", submitted))
+        result.append(
+            _build_group_summary("TTL", "ttl", submitted, sam_avg=_avg([r.sam_avg for r in pu_rows]))
+        )
     return result
 
 
@@ -181,8 +220,8 @@ def build_kpi_summary(lines: list[LineDaySummary]) -> KpiSummary:
         total_target_output=total_target,
         total_actual_output=total_actual,
         completion_rate=round(total_actual / total_target * 100, 1) if total_target else None,
-        avg_eff_sew=_shift_weighted_avg([(l.shift_weight, l.eff_sew) for l in lines]),
-        avg_eff_fin=_shift_weighted_avg([(l.shift_weight, l.eff_fin) for l in lines]),
+        avg_eff_sew=_shift_weighted_avg([(l.eff_sew_weight, l.eff_sew) for l in lines]),
+        avg_eff_fin=_shift_weighted_avg([(l.eff_fin_weight, l.eff_fin) for l in lines]),
         total_wip=sum((l.wip_fin or 0) for l in lines),
         lines_with_issue=sum(1 for l in lines if l.issue_note),
         lines_submitted=sum(1 for l in lines if l.is_submitted),

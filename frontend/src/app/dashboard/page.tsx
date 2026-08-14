@@ -364,6 +364,7 @@ function DashboardContent() {
                     <th className="px-4 py-2 text-right font-medium">Target OUT</th>
                     <th className="px-4 py-2 text-right font-medium">Target EFF</th>
                     <th className="px-4 py-2 text-right font-medium">SAM</th>
+                    <th className="px-4 py-2 text-right font-medium">Số ca</th>
                     <th className="px-4 py-2 text-right font-medium">OUT-SEW</th>
                     <th className="px-4 py-2 text-right font-medium">EFF-SEW</th>
                     <th className="px-4 py-2 text-right font-medium">OUT-FIN (Scan)</th>
@@ -399,6 +400,7 @@ function DashboardContent() {
                       <td className="px-4 py-2 text-right">{row.target_output ? row.target_output.toLocaleString("vi-VN") : "-"}</td>
                       <td className="px-4 py-2 text-right">{row.target_eff_avg !== null ? `${row.target_eff_avg}%` : "-"}</td>
                       <td className="px-4 py-2 text-right">{row.sam_avg ?? "-"}</td>
+                      <td className="px-4 py-2 text-right">{row.shift_total || "-"}</td>
                       <td className="px-4 py-2 text-right">{row.out_sew.toLocaleString("vi-VN")}</td>
                       <td className={`px-4 py-2 text-right ${effCellClass(row.eff_sew_avg, row.target_eff_avg, row.level)}`}>
                         {row.eff_sew_avg !== null ? `${row.eff_sew_avg}%` : "-"}
@@ -416,7 +418,7 @@ function DashboardContent() {
                   ))}
                   {!data.summary_table || data.summary_table.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-4 py-8 text-center text-sm text-muted">
+                      <td colSpan={12} className="px-4 py-8 text-center text-sm text-muted">
                         Chưa có line nào nộp báo cáo ngày này.
                       </td>
                     </tr>

@@ -150,10 +150,16 @@ class LineDaySummary(BaseModel):
     target_output: int
     target_eff: float
     shift_display: str
-    # Sum of the Shift/Ca number(s) reported for this line/day (e.g. 1, 2, or
-    # 1+2=3) - used as the weight when averaging EFF% across lines, matching
-    # the factory's original spreadsheet formula (SUMPRODUCT(Shift, EFF%)/SUM(Shift)).
+    # How many shifts this line ran today (1 or 2) - the factory's "Shift/Ca"
+    # column. Used as the weight when averaging EFF%/target-EFF across lines,
+    # matching the original spreadsheet: SUMPRODUCT(Shift, EFF%) / SUM(Shift).
     shift_weight: int
+    # Same count, but only over the shifts that actually reported that metric.
+    # A line that ran 2 shifts but only logged EFF-FIN for one of them must
+    # weigh 1, not 2 - the original sheet drops such lines from the divisor
+    # too (its subtotals divide by 11/21/53 instead of 13/23/55).
+    eff_sew_weight: int
+    eff_fin_weight: int
     out_sew: int | None
     eff_sew: float | None
     out_fin_scanpack: int | None
@@ -186,6 +192,7 @@ class GroupSummary(BaseModel):
     target_eff_avg: float | None
     sam_avg: float | None
     line_count: int
+    shift_total: int  # total shifts run by the group, the sheet's Shift/Ca subtotal
     out_sew: int
     eff_sew_avg: float | None
     out_fin_scanpack: int
