@@ -144,3 +144,29 @@ export interface DashboardResponse {
   summary_table: GroupSummary[];
   issues: IssueItem[];
 }
+
+export type ReportHistoryAction = "submit" | "target_update" | "delete";
+
+export interface ReportHistoryValues {
+  buyer: string | null;
+  sam: number | null;
+  target_output: number | null;
+  target_eff: number | null;
+  out_sew: number | null;
+  eff_sew: number | null;
+  out_fin_scanpack: number | null;
+  out_fin_fin: number | null;
+  eff_fin: number | null;
+  wip_dip: number | null;
+  wip_pre_pi: number | null;
+  issue_note: string | null;
+}
+
+export interface ReportHistoryEntry {
+  id: number;
+  action: ReportHistoryAction;
+  changed_by_name: string | null;
+  changed_at: string;
+  old_values: ReportHistoryValues | null;
+  new_values: ReportHistoryValues | null;
+}

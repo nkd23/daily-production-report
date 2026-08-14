@@ -122,3 +122,28 @@ class DailyReport(Base):
 
     line: Mapped["Line"] = relationship(back_populates="reports")
     submitted_by_user: Mapped["User | None"] = relationship(foreign_keys=[submitted_by])
+
+
+class ReportHistory(Base):
+    """Audit trail for daily_reports changes - Thư ký/Sếp-only. Not linked by
+    foreign key to daily_reports.id because a "Xóa & nhập lại" delete removes
+    that row entirely; line_id/report_date/shift are stored directly instead
+    so the trail survives the row it describes. old_values/new_values are a
+    JSON snapshot of every report field, taken before and after each action,
+    so the full before/after picture is visible without needing to know in
+    advance which fields a given action could touch."""
+
+    __tablename__ = "report_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False, index=True)
+    report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
+    shift: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    action: Mapped[str] = mapped_column(Unicode(20), nullable=False)  # "submit" | "target_update" | "delete"
+    changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    changed_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    old_values: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    new_values: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+    line: Mapped["Line"] = relationship()
+    changed_by_user: Mapped["User | None"] = relationship(foreign_keys=[changed_by])

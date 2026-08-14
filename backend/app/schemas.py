@@ -143,6 +143,15 @@ class UnlockRequest(BaseModel):
     is_locked: bool
 
 
+class ReportHistoryOut(BaseModel):
+    id: int
+    action: str  # "submit" | "target_update" | "delete"
+    changed_by_name: str | None
+    changed_at: datetime
+    old_values: dict | None
+    new_values: dict | None
+
+
 # ---------- Aggregated / dashboard ----------
 class LineDaySummary(BaseModel):
     line_id: int

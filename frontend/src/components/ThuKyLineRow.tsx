@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Lock, LockOpen, MessageSquareWarning } from "lucide-react";
+import { ChevronDown, ChevronUp, History, Lock, LockOpen, MessageSquareWarning } from "lucide-react";
 import { Badge, Button } from "./ui";
 import { LineEntryCard } from "./LineEntryCard";
+import { ReportHistoryPanel } from "./ReportHistoryPanel";
 import { api } from "@/lib/api";
 import type { LineDaySummary, LineWithReport } from "@/lib/types";
 
@@ -12,6 +13,7 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
   const [shift, setShift] = useState(1);
   const [detail, setDetail] = useState<LineWithReport | null>(null);
   const [lockLoading, setLockLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
@@ -101,6 +103,9 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
                   </>
                 )}
               </Button>
+              <Button variant="secondary" size="sm" onClick={() => setShowHistory((v) => !v)}>
+                <History size={14} /> {showHistory ? "Ẩn lịch sử" : "Xem lịch sử"}
+              </Button>
               <p className="text-xs text-muted">Nhập hộ nếu Tổ trưởng nhờ hỗ trợ, hoặc sửa số liệu bị sai.</p>
             </div>
             {detail ? (
@@ -116,6 +121,11 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
             ) : (
               <p className="text-sm text-muted">Đang tải...</p>
             )}
+            {showHistory ? (
+              <div className="mt-3">
+                <ReportHistoryPanel lineId={summary.line_id} reportDate={reportDate} />
+              </div>
+            ) : null}
           </td>
         </tr>
       ) : null}

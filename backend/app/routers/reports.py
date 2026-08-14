@@ -1,4 +1,6 @@
+import json
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -6,11 +8,59 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
-from app.models import DailyReport, Line, User, UserRole
-from app.schemas import DailyReportInput, DailyReportOut, LineOut, LineTargetUpdate, LineWithReportOut, UnlockRequest
+from app.models import DailyReport, Line, ReportHistory, User, UserRole
+from app.schemas import (
+    DailyReportInput,
+    DailyReportOut,
+    LineOut,
+    LineTargetUpdate,
+    LineWithReportOut,
+    ReportHistoryOut,
+    UnlockRequest,
+)
 from app.services.aggregation import latest_target_snapshots, resolve_line_target
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+HISTORY_FIELDS = (
+    "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
+    "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note",
+)
+
+
+def _snapshot(report: DailyReport) -> dict:
+    """Plain-JSON-able snapshot of every field ReportHistory tracks."""
+    out = {}
+    for field in HISTORY_FIELDS:
+        value = getattr(report, field)
+        out[field] = float(value) if isinstance(value, Decimal) else value
+    return out
+
+
+def _record_history(
+    db: Session,
+    *,
+    line_id: int,
+    report_date: date,
+    shift: int,
+    action: str,
+    changed_by: int,
+    old: dict | None,
+    new: dict | None,
+):
+    if old == new:
+        return  # nothing actually changed - don't clutter the trail
+    db.add(
+        ReportHistory(
+            line_id=line_id,
+            report_date=report_date,
+            shift=shift,
+            action=action,
+            changed_by=changed_by,
+            old_values=json.dumps(old) if old is not None else None,
+            new_values=json.dumps(new) if new is not None else None,
+        )
+    )
 
 
 def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
@@ -145,12 +195,19 @@ def submit_report(
         report = DailyReport(line_id=line_id, report_date=report_date, shift=payload.shift)
         db.add(report)
 
+    old_snapshot = _snapshot(report)
+
     for field in ("buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note"):
         setattr(report, field, getattr(payload, field))
 
     report.is_submitted = True
     report.submitted_by = current_user.id
     report.submitted_at = local_now().replace(tzinfo=None)
+
+    _record_history(
+        db, line_id=line_id, report_date=report_date, shift=payload.shift, action="submit",
+        changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
+    )
 
     db.commit()
     db.refresh(report)
@@ -194,9 +251,16 @@ def update_line_targets(
         report = DailyReport(line_id=line_id, report_date=report_date, shift=shift)
         db.add(report)
 
+    old_snapshot = _snapshot(report)
+
     report.sam = payload.sam
     report.target_output = payload.target_output
     report.target_eff = payload.target_eff
+
+    _record_history(
+        db, line_id=line_id, report_date=report_date, shift=shift, action="target_update",
+        changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
+    )
 
     db.commit()
     return _line_out(line, payload.sam, payload.target_output, payload.target_eff)
@@ -227,8 +291,41 @@ def delete_report(
     if current_user.role == UserRole.to_truong and effective_locked:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
 
+    _record_history(
+        db, line_id=line_id, report_date=report_date, shift=shift, action="delete",
+        changed_by=current_user.id, old=_snapshot(report), new=None,
+    )
+
     db.delete(report)
     db.commit()
+
+
+@router.get(
+    "/lines/{line_id}/history", response_model=list[ReportHistoryOut], dependencies=[Depends(require_thu_ky_or_sep)]
+)
+def get_report_history(
+    line_id: int,
+    report_date: date = Query(default_factory=local_today),
+    db: Session = Depends(get_db),
+):
+    """Every submit/target-update/delete for this line on this date (both
+    shifts), newest first - Thư ký/Sếp-only audit trail."""
+    rows = db.scalars(
+        select(ReportHistory)
+        .where(ReportHistory.line_id == line_id, ReportHistory.report_date == report_date)
+        .order_by(ReportHistory.changed_at.desc())
+    ).all()
+    return [
+        ReportHistoryOut(
+            id=r.id,
+            action=r.action,
+            changed_by_name=r.changed_by_user.full_name if r.changed_by_user else None,
+            changed_at=r.changed_at,
+            old_values=json.loads(r.old_values) if r.old_values else None,
+            new_values=json.loads(r.new_values) if r.new_values else None,
+        )
+        for r in rows
+    ]
 
 
 @router.patch("/{report_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])

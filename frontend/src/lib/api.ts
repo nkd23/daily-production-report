@@ -4,6 +4,7 @@ import type {
   DashboardResponse,
   Line,
   LineWithReport,
+  ReportHistoryEntry,
   User,
   UserRole,
 } from "./types";
@@ -116,6 +117,8 @@ export const api = {
     }),
   deleteReport: (lineId: number, reportDate: string, shift: number) =>
     request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}&shift=${shift}`, { method: "DELETE" }),
+  getReportHistory: (lineId: number, reportDate: string) =>
+    request<ReportHistoryEntry[]>(`/api/reports/lines/${lineId}/history?report_date=${reportDate}`),
 
   dashboardSummary: (reportDate: string) =>
     request<DashboardResponse>(`/api/dashboard/summary?report_date=${reportDate}`),
