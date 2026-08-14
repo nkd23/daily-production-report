@@ -150,6 +150,10 @@ class LineDaySummary(BaseModel):
     target_output: int
     target_eff: float
     shift_display: str
+    # Sum of the Shift/Ca number(s) reported for this line/day (e.g. 1, 2, or
+    # 1+2=3) - used as the weight when averaging EFF% across lines, matching
+    # the factory's original spreadsheet formula (SUMPRODUCT(Shift, EFF%)/SUM(Shift)).
+    shift_weight: int
     out_sew: int | None
     eff_sew: float | None
     out_fin_scanpack: int | None

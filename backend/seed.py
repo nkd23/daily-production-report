@@ -27,7 +27,7 @@ LINES = [
     ("05AB", "Ms Thảo"),
     ("06AB", "Ms Thảo"),
     ("07AB", "Ms Thảo"),
-    ("08AB", "Ms Hương"),
+    ("08AB", "Ms Thảo"),
     ("18AB", "Ms Thảo"),
     ("09AB", "Ms Hương"),
     ("10AB", "Ms Hương"),

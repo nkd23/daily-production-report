@@ -59,21 +59,20 @@ def _avg(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
 
 
-def _weighted_eff(pairs: list[tuple[float | None, float | None]]) -> float | None:
-    """Pooled efficiency = total output / total implied-standard output.
-    Matches app.services.aggregation._weighted_eff - keep in sync. Averaging
-    EFF% outright would let a tiny line count as much as a big one; this is
-    how the factory computes the Executive/PU/TTL subtotal rows."""
-    total_output = 0.0
-    total_capacity = 0.0
-    for output, eff in pairs:
-        if not output or not eff:
+def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float | None:
+    """Weighted average of EFF%, weighted by Shift/Ca value. Matches
+    app.services.aggregation._shift_weighted_avg (keep in sync) and the
+    factory's original spreadsheet formula: SUMPRODUCT(Shift, EFF%) / SUM(Shift)."""
+    total_weight = 0.0
+    total_weighted = 0.0
+    for weight, eff in pairs:
+        if not weight or eff is None:
             continue
-        total_output += output
-        total_capacity += output / (eff / 100)
-    if not total_capacity:
+        total_weight += weight
+        total_weighted += weight * eff
+    if not total_weight:
         return None
-    return round(total_output / total_capacity * 100, 2)
+    return round(total_weighted / total_weight, 2)
 
 
 def _eff_fill(actual: float | None, target: float | None):
@@ -148,10 +147,10 @@ def _subtotal_row_values(label: str, items: list[LineDaySummary]) -> list:
         "",
         "",
         sum((i.out_sew or 0) for i in items),
-        _weighted_eff([(i.out_sew, float(i.eff_sew) if i.eff_sew is not None else None) for i in items]),
+        _shift_weighted_avg([(i.shift_weight, float(i.eff_sew) if i.eff_sew is not None else None) for i in items]),
         sum((i.out_fin_scanpack or 0) for i in items),
         sum((i.out_fin_fin or 0) for i in items),
-        _weighted_eff([(i.out_fin_fin, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
+        _shift_weighted_avg([(i.shift_weight, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
         sum((i.var or 0) for i in items),
         sum((i.wip_fin or 0) for i in items),
         "",
