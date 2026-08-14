@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { LineEntryCard } from "@/components/LineEntryCard";
+import { Input } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { LineWithReport } from "@/lib/types";
 
@@ -21,7 +22,7 @@ function formatVietnameseDate(iso: string) {
 }
 
 function ToTruongContent() {
-  const reportDate = todayISO();
+  const [reportDate, setReportDate] = useState(todayISO());
   const [items, setItems] = useState<LineWithReport[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +44,14 @@ function ToTruongContent() {
     <PageShell
       title="Nhập sản lượng"
       description={`${formatVietnameseDate(reportDate)} · Đã nộp ${submittedCount}/${total} line`}
+      actions={
+        <Input
+          type="date"
+          value={reportDate}
+          onChange={(e) => setReportDate(e.target.value)}
+          className="w-auto"
+        />
+      }
     >
       {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
 

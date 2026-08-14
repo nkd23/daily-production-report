@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound, Table2 } from "lucide-react";
 import { useAuth, roleLabel } from "@/lib/auth-context";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import type { UserRole } from "@/lib/types";
@@ -12,6 +12,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/to-truong", label: "Nhập sản lượng", icon: ClipboardList, roles: ["to_truong"] },
   { href: "/thu-ky", label: "Theo dõi nộp báo cáo", icon: ClipboardList, roles: ["thu_ky", "sep"] },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep"] },
+  { href: "/du-lieu-san-xuat", label: "Dữ liệu sản xuất", icon: Table2, roles: ["thu_ky", "sep"] },
   { href: "/thu-ky/config", label: "Cấu hình Line", icon: Settings2, roles: ["thu_ky", "sep"] },
 ];
 
