@@ -13,9 +13,14 @@ from app.services.aggregation import latest_target_snapshots, resolve_line_targe
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
-def _report_out(report: DailyReport, target_output: int) -> DailyReportOut:
+def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
+    """VAR compares against the target entered on this exact report row, not
+    an earlier day's edit or the Line's ever-changing "current" value -
+    falls back to the Line's static default only when this day never had a
+    target of its own (see app.services.aggregation module docstring)."""
     out = DailyReportOut.model_validate(report)
     out.is_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+    target_output = report.target_output if report.target_output is not None else line.target_output
     out.var = (report.out_fin_fin - target_output) if report.out_fin_fin is not None and target_output else None
     return out
 
@@ -78,7 +83,7 @@ def get_my_lines(
 
         report = reports.get(line.id)
         if report is not None:
-            report_out = _report_out(report, target_output)
+            report_out = _report_out(report, line)
             is_editable = current_user.role != UserRole.to_truong or not report_out.is_locked
         else:
             report_out = None
@@ -107,7 +112,7 @@ def get_line_report(
         )
     )
     sam, target_output, target_eff = resolve_line_target(db, line, report_date)
-    report_out = _report_out(report, target_output) if report else None
+    report_out = _report_out(report, line) if report else None
     return LineWithReportOut(line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=True)
 
 
@@ -149,8 +154,7 @@ def submit_report(
 
     db.commit()
     db.refresh(report)
-    _, target_output, _ = resolve_line_target(db, line, report_date)
-    return _report_out(report, target_output)
+    return _report_out(report, line)
 
 
 @router.patch("/lines/{line_id}/targets", response_model=LineOut)
@@ -237,8 +241,7 @@ def set_lock(report_id: int, payload: UnlockRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(report)
     line = _get_line_or_404(db, report.line_id)
-    _, target_output, _ = resolve_line_target(db, line, report.report_date)
-    return _report_out(report, target_output)
+    return _report_out(report, line)
 
 
 @router.patch("/lines/{line_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
@@ -265,5 +268,4 @@ def set_lock_by_line(
     report.secretary_override = True
     db.commit()
     db.refresh(report)
-    _, target_output, _ = resolve_line_target(db, line, report_date)
-    return _report_out(report, target_output)
+    return _report_out(report, line)

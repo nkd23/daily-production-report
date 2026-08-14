@@ -4,9 +4,13 @@ dashboard API and the Excel export are based on, so the two stay consistent.
 A line can have up to 2 daily_reports rows for a given date (shift 1 and 2).
 They are combined here: quantities (OUT-*, WIP) are summed, efficiencies
 (EFF-*) are averaged across the shifts that reported a value, issue notes are
-concatenated, and SAM/target_output/target_eff are resolved as of that date
-from report history (see latest_target_snapshots), falling back to the
-Line's default only for a line that has never had a target/SAM entered.
+concatenated, and SAM/target_output/target_eff come ONLY from report_date's
+own rows - falling back to the Line's static default (never auto-updated,
+only ever changed via "Cấu hình Line"), never to another date's edit. A day
+nobody has touched must show as having no data of its own, even if a later
+or earlier day does - see routers/reports.py's resolve_line_target for the
+separate, deliberately-forward-looking resolver used only to prefill the
+edit form with a convenient starting point.
 """
 
 from datetime import date
@@ -24,6 +28,13 @@ def _avg(values: list[float]) -> float | None:
     if not values:
         return None
     return round(sum(values) / len(values), 2)
+
+
+def _last_non_null(values):
+    for v in reversed(values):
+        if v is not None:
+            return v
+    return None
 
 
 def latest_target_snapshots(
@@ -94,8 +105,6 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
     for r in reports:
         reports_by_line.setdefault(r.line_id, []).append(r)
 
-    target_snapshots = latest_target_snapshots(db, report_date)
-
     summaries: list[LineDaySummary] = []
     for line in lines:
         line_reports = sorted(reports_by_line.get(line.id, []), key=lambda r: r.shift)
@@ -124,14 +133,17 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         buyers = list(dict.fromkeys(r.buyer for r in line_reports if r.buyer))
         buyer = " / ".join(buyers) if buyers else None
 
-        snapshot = target_snapshots.get(line.id)
-        if snapshot is not None:
-            sam = float(snapshot.sam)
-            target_output = snapshot.target_output
-            target_eff = float(snapshot.target_eff)
-        else:
+        # Only report_date's own rows count - no history lookback here (see
+        # module docstring). A line nobody touched today falls back to the
+        # Line's static admin-configured default, not to a past day's edit.
+        sam = _last_non_null([float(r.sam) if r.sam is not None else None for r in line_reports])
+        if sam is None:
             sam = float(line.sam)
+        target_output = _last_non_null([r.target_output for r in line_reports])
+        if target_output is None:
             target_output = line.target_output
+        target_eff = _last_non_null([float(r.target_eff) if r.target_eff is not None else None for r in line_reports])
+        if target_eff is None:
             target_eff = float(line.target_eff)
 
         is_submitted = any(r.is_submitted for r in line_reports)
