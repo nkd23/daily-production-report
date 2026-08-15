@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Factory, Lock, User as UserIcon } from "lucide-react";
+import { Eye, EyeOff, Factory, Lock, User as UserIcon } from "lucide-react";
 import { useAuth, roleHomePath } from "@/lib/auth-context";
 import { Button, Input, Label } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -12,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,12 +72,21 @@ export default function LoginPage() {
               <Lock size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <Input
                 required
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="pl-9"
+                className="pl-9 pr-9"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted transition-colors hover:text-foreground"
+                title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
           </div>
 
@@ -87,6 +97,10 @@ export default function LoginPage() {
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
           </Button>
+
+          <p className="mt-4 text-center text-xs text-muted">
+            Quên mật khẩu? Liên hệ Thư ký hoặc Sếp để được đặt lại.
+          </p>
         </form>
       </div>
     </div>

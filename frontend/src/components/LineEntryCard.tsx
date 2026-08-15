@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Lock, Pencil, Send, Trash2, X } from "lucide-react";
 import { Badge, Button, Input, Label, Textarea } from "./ui";
+import { BuyerInput } from "./BuyerInput";
 import { api, ApiError } from "@/lib/api";
 import type { DailyReportInput, LineWithReport } from "@/lib/types";
 
@@ -235,13 +236,10 @@ export function LineEntryCard({
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3 lg:grid-cols-6">
         <div>
           <Label>Buyer *</Label>
-          <Input
-            required
+          <BuyerInput
             disabled={locked}
             value={form.buyer}
-            onChange={(e) => setForm({ ...form, buyer: e.target.value.toUpperCase() })}
-            placeholder="VD: NIKE"
-            className="uppercase placeholder:normal-case"
+            onChange={(buyer) => setForm({ ...form, buyer })}
           />
         </div>
         <div>
