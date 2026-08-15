@@ -19,6 +19,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { Badge, Button, Card, Input, StatCard } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useSharedReportDate } from "@/lib/report-date-context";
 import type { DashboardResponse } from "@/lib/types";
 
 function yesterdayISO() {
@@ -149,7 +150,7 @@ function ExecPieTooltip({ active, payload }: { active?: boolean; payload?: { pay
 }
 
 function DashboardContent() {
-  const [reportDate, setReportDate] = useState(yesterdayISO());
+  const [reportDate, setReportDate] = useSharedReportDate(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);

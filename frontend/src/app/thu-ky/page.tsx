@@ -7,6 +7,7 @@ import { PageShell } from "@/components/PageShell";
 import { ThuKyLineRow } from "@/components/ThuKyLineRow";
 import { Button, Card, Input } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useSharedReportDate } from "@/lib/report-date-context";
 import type { DashboardResponse } from "@/lib/types";
 
 function todayISO() {
@@ -14,7 +15,7 @@ function todayISO() {
 }
 
 function ThuKyContent() {
-  const [reportDate, setReportDate] = useState(todayISO());
+  const [reportDate, setReportDate] = useSharedReportDate(todayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [exporting, setExporting] = useState(false);
 

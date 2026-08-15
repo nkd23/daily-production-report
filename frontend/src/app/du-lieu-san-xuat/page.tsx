@@ -6,6 +6,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { Badge, Button, Card, Input } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useSharedReportDate } from "@/lib/report-date-context";
 import type { DashboardResponse, GroupSummary, LineDaySummary } from "@/lib/types";
 
 function todayISO() {
@@ -131,7 +132,7 @@ function SubtotalRow({ row }: { row: GroupSummary | undefined }) {
 }
 
 function DuLieuSanXuatContent() {
-  const [reportDate, setReportDate] = useState(todayISO());
+  const [reportDate, setReportDate] = useSharedReportDate(todayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -181,26 +182,26 @@ function DuLieuSanXuatContent() {
         <p className="text-sm text-muted">Đang tải...</p>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100vh-260px)] overflow-auto">
             <table className="w-full min-w-[1400px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Line</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Buyer</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Target SL</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Target EFF</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">SAM</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Số ca</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">OUT-SEW</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">EFF-SEW</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">OUT-FIN (Scan)</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">OUT-FIN (Fin)</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">EFF-FIN</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">VAR</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Tồn Dip</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">Tồn trước PI</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Trạng thái</th>
-                  <th className="whitespace-nowrap px-3 py-2 font-medium">Issue</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Line</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Buyer</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Target SL</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Target EFF</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">SAM</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Số ca</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">OUT-SEW</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">EFF-SEW</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">OUT-FIN (Scan)</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">OUT-FIN (Fin)</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">EFF-FIN</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">VAR</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn Dip</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn trước PI</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Trạng thái</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Issue</th>
                 </tr>
               </thead>
               <tbody>
