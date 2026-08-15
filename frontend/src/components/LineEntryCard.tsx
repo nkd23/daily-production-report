@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, Pencil, Send, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Lock, Pencil, Send, Trash2, X } from "lucide-react";
 import { Badge, Button, Input, Label, Textarea } from "./ui";
 import { BuyerInput } from "./BuyerInput";
 import { api, ApiError } from "@/lib/api";
@@ -125,6 +125,7 @@ export function LineEntryCard({
 
   const submitted = report?.is_submitted ?? false;
   const locked = !is_editable;
+  const targetMissing = line.sam === 0 || line.target_output === 0 || line.target_eff === 0;
 
   async function handleDelete() {
     if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} ngày này?\nKhông thể hoàn tác.`)) {
@@ -207,6 +208,10 @@ export function LineEntryCard({
               >
                 <Pencil size={12} />
               </button>
+              <span className="flex items-center gap-1 text-xs font-medium text-warning">
+                <ArrowLeft size={12} />
+                Nhớ nhập Target trước nhé!
+              </span>
             </p>
           )}
         </div>
@@ -334,7 +339,7 @@ export function LineEntryCard({
         </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-4">
-          <Label>Issue / Lí do (không bắt buộc)</Label>
+          <Label>Issue / Lí do</Label>
           <Textarea
             rows={2}
             disabled={locked}
@@ -347,7 +352,10 @@ export function LineEntryCard({
         <div className="col-span-2 flex flex-col justify-end gap-2 sm:col-span-3 lg:col-span-2">
           {error ? <p className="text-xs text-danger">{error}</p> : null}
           {justSaved && !error ? <p className="text-xs text-success">Đã lưu thành công</p> : null}
-          <Button type="submit" disabled={locked || saving} className="w-full">
+          {!locked && targetMissing ? (
+            <p className="text-xs text-danger">Cần nhập SAM/Target trước khi nộp báo cáo.</p>
+          ) : null}
+          <Button type="submit" disabled={locked || saving || targetMissing} className="w-full">
             <Send size={15} />
             {saving ? "Đang nộp..." : "Nộp báo cáo"}
           </Button>

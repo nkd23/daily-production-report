@@ -5,13 +5,11 @@ There is exactly one daily_reports row per line per date. The Tổ trưởng
 enters shift_count (the factory's "tổng số Ca") directly on that row rather
 than submitting once per shift, so no summing/averaging across rows is
 needed here - every OUT-*/EFF-*/WIP value is read straight off the row.
-SAM/target_output/target_eff come ONLY from report_date's own row - falling
-back to the Line's static default (never auto-updated, only ever changed via
-"Cấu hình Line"), never to another date's edit. A day nobody has touched
-must show as having no data of its own, even if a later or earlier day does
-- see routers/reports.py's resolve_line_target for the separate,
-deliberately-forward-looking resolver used only to prefill the edit form
-with a convenient starting point.
+SAM/target_output/target_eff come ONLY from report_date's own row. A day
+nobody has touched must show as having no data of its own (0 / blank), even
+if a later or earlier day does, or if the Line has a bootstrap default
+configured via "Cấu hình Line" - Tổ trưởng must always enter these by hand
+for a new day, see routers/reports.py's get_my_lines/get_line_report.
 """
 
 from datetime import date
@@ -29,43 +27,6 @@ def _avg(values: list[float]) -> float | None:
     if not values:
         return None
     return round(sum(values) / len(values), 2)
-
-
-def latest_target_snapshots(
-    db: Session, report_date: date, line_id: int | None = None
-) -> dict[int, DailyReport]:
-    """Latest report row, as of report_date, that had its SAM/target explicitly
-    set - keyed by line_id. This is the source of truth for a line's SAM/
-    target_output/target_eff on a given day (they can change any day the
-    buyer/style on a line changes), NOT the Line's own field, which only holds
-    whatever was most recently edited overall and would incorrectly "leak"
-    into how earlier, unreported days are displayed.
-
-    Pass line_id to scope the query to a single line (used by routers/reports.py
-    for one-line views); omitted, it resolves every line in one query (used by
-    build_line_summaries below).
-    """
-    stmt = select(DailyReport).where(
-        DailyReport.report_date <= report_date, DailyReport.target_output.is_not(None)
-    )
-    if line_id is not None:
-        stmt = stmt.where(DailyReport.line_id == line_id)
-    stmt = stmt.order_by(DailyReport.line_id, DailyReport.report_date.desc())
-    rows = db.scalars(stmt).all()
-    latest: dict[int, DailyReport] = {}
-    for r in rows:
-        latest.setdefault(r.line_id, r)
-    return latest
-
-
-def resolve_line_target(db: Session, line: Line, report_date: date) -> tuple[float, int, float]:
-    """SAM/target_output/target_eff as they stood on report_date - see
-    latest_target_snapshots. Used by routers/reports.py to show a Tổ trưởng
-    the right day's numbers instead of the Line's ever-changing "current" value."""
-    snapshot = latest_target_snapshots(db, report_date, line_id=line.id).get(line.id)
-    if snapshot is not None:
-        return float(snapshot.sam), snapshot.target_output, float(snapshot.target_eff)
-    return float(line.sam), line.target_output, float(line.target_eff)
 
 
 def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float | None:

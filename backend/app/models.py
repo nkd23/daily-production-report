@@ -51,12 +51,12 @@ class Line(Base):
     line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
     executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
-    # Bootstrap-only default SAM/target, used solely for a line that has never
-    # had a value entered on any daily_reports row. Deliberately NOT kept in
-    # sync with the latest edit - app.services.aggregation.resolve_line_target
-    # resolves the real per-day value from report history, and updating this
-    # field on every edit would make a later edit "leak" into earlier,
-    # unreported dates that fall back to it.
+    # Bootstrap-only default SAM/target - the Tổ trưởng entry form never reads
+    # this (every day must have its own SAM/target entered by hand, see
+    # routers/reports.py's _resolve_day_target). Only used as a last-resort
+    # fallback inside VAR/dashboard math for a report that has output but was
+    # never given its own target (see _report_out and
+    # app.services.aggregation.build_line_summaries).
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)

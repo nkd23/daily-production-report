@@ -18,7 +18,6 @@ from app.schemas import (
     ReportHistoryOut,
     UnlockRequest,
 )
-from app.services.aggregation import latest_target_snapshots, resolve_line_target
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -73,10 +72,21 @@ def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
     return out
 
 
+def _resolve_day_target(report: DailyReport | None) -> tuple[float, int, float]:
+    """SAM/target_output/target_eff for the entry form, from report_date's own
+    row only. If Tổ trưởng hasn't set these for this exact day yet, they come
+    back blank (0) rather than carrying over an earlier day's edit or the
+    Line's "Cấu hình Line" bootstrap default - every new day must be entered
+    by hand (see app.services.aggregation module docstring)."""
+    if report is not None and report.sam is not None and report.target_output is not None and report.target_eff is not None:
+        return float(report.sam), report.target_output, float(report.target_eff)
+    return 0.0, 0, 0.0
+
+
 def _line_out(line: Line, sam: float, target_output: int, target_eff: float) -> LineOut:
     """LineOut with sam/target_output/target_eff overridden to whatever was
-    resolved as true on the report_date in question - SAM/target can change
-    day to day, so the Line's own field is only a fallback default."""
+    resolved as true for the report_date in question (see _resolve_day_target) -
+    NOT the Line's own field, which is bootstrap-only and no longer surfaces here."""
     out = LineOut.model_validate(line)
     out.to_truong_name = line.to_truong.full_name if line.to_truong else None
     out.sam, out.target_output, out.target_eff = sam, target_output, target_eff
@@ -117,17 +127,11 @@ def get_my_lines(
         ).all()
         reports = {r.line_id: r for r in report_rows}
 
-    target_snapshots = latest_target_snapshots(db, report_date)
-
     result = []
     for line in lines:
-        snapshot = target_snapshots.get(line.id)
-        if snapshot is not None:
-            sam, target_output, target_eff = float(snapshot.sam), snapshot.target_output, float(snapshot.target_eff)
-        else:
-            sam, target_output, target_eff = float(line.sam), line.target_output, float(line.target_eff)
-
         report = reports.get(line.id)
+        sam, target_output, target_eff = _resolve_day_target(report)
+
         if report is not None:
             report_out = _report_out(report, line)
             is_editable = current_user.role != UserRole.to_truong or not report_out.is_locked
@@ -154,7 +158,7 @@ def get_line_report(
     report = db.scalar(
         select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
-    sam, target_output, target_eff = resolve_line_target(db, line, report_date)
+    sam, target_output, target_eff = _resolve_day_target(report)
     report_out = _report_out(report, line) if report else None
     return LineWithReportOut(line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=True)
 
@@ -183,6 +187,14 @@ def submit_report(
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
         report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
+
+    # SAM/target must be entered (via update_line_targets) before output can be
+    # submitted for this day - see _resolve_day_target, there is no fallback.
+    if report.sam is None or report.target_output is None or report.target_eff is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vui lòng nhập SAM / Target sản lượng / Target hiệu suất cho ngày này trước khi nộp báo cáo",
+        )
 
     old_snapshot = _snapshot(report)
 
@@ -215,11 +227,11 @@ def update_line_targets(
     OUT-TAR / NEW EFF-TAR for a specific day - these can change day to
     day (the factory re-sets them whenever the buyer/style on a line changes),
     so they are stored on that day's report row, not as a fixed Line property.
-    Line.sam/target_output/target_eff is deliberately left untouched here: it
-    is only ever a bootstrap default for a line that has no history at all, and
-    mutating it on every edit would make it "leak" into how earlier dates with
-    no report of their own are displayed (they resolve via report history, see
-    app.services.aggregation.resolve_line_target - not via the Line's field).
+    Line.sam/target_output/target_eff is deliberately left untouched here: the
+    entry form no longer reads it at all (see _resolve_day_target) - it only
+    exists as a fallback inside VAR/dashboard math for a report that already
+    has output but was never given its own target (see _report_out and
+    app.services.aggregation.build_line_summaries).
     """
     line = _get_line_or_404(db, line_id)
     _assert_line_access(current_user, line)
