@@ -44,6 +44,9 @@ def require_roles(*roles: UserRole):
 require_thu_ky_or_sep = require_roles(UserRole.thu_ky, UserRole.sep)
 require_sep_only = require_roles(UserRole.sep)
 require_any_role = require_roles(UserRole.to_truong, UserRole.thu_ky, UserRole.sep)
+# Dashboard/Dữ liệu sản xuất are the only pages an Executive account can see,
+# and only scoped to their own executive_name (see routers/dashboard.py).
+require_dashboard_viewer = require_roles(UserRole.thu_ky, UserRole.sep, UserRole.executive)
 
 
 def local_now() -> datetime:

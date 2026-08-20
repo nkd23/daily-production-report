@@ -24,27 +24,27 @@ function ConfigContent() {
   }, [load]);
 
   const toTruongs = users?.filter((u) => u.role === "to_truong" && u.is_active) ?? [];
+  const executiveNames = [...new Set((lines ?? []).map((l) => l.executive_name))].sort();
 
   return (
     <PageShell title="Cấu hình Line & tài khoản" description="Quản lý danh sách line, target, và phân công Tổ trưởng phụ trách">
       <div className="flex flex-col gap-6">
+        {users ? <UserManagement users={users} executiveNames={executiveNames} onChanged={load} /> : null}
+
         <Card className="p-5">
           <h2 className="mb-4 text-sm font-semibold text-foreground">Thêm Line mới</h2>
-          <AddLineForm toTruongs={toTruongs} onCreated={load} />
+          <AddLineForm toTruongs={toTruongs} executiveNames={executiveNames} onCreated={load} />
         </Card>
 
         <Card className="overflow-hidden">
           <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">Danh sách Line ({lines?.length ?? 0})</h2>
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
+            <table className="w-full min-w-[700px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
                   <th className="px-3 py-2 font-medium">Line</th>
                   <th className="px-3 py-2 font-medium">PU</th>
                   <th className="px-3 py-2 font-medium">Executive</th>
-                  <th className="px-3 py-2 font-medium">SAM</th>
-                  <th className="px-3 py-2 font-medium">Target Out</th>
-                  <th className="px-3 py-2 font-medium">Target EFF</th>
                   <th className="px-3 py-2 font-medium">Tổ trưởng</th>
                   <th className="px-3 py-2 font-medium">Trạng thái</th>
                   <th className="px-3 py-2 font-medium text-right">Thao tác</th>
@@ -58,8 +58,6 @@ function ConfigContent() {
             </table>
           </div>
         </Card>
-
-        {users ? <UserManagement users={users} onChanged={load} /> : null}
       </div>
     </PageShell>
   );

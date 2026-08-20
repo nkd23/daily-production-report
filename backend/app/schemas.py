@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     username: str
     full_name: str
     role: UserRole
+    executive_name: str | None = None
     is_active: bool
 
 
@@ -36,11 +37,14 @@ class UserCreate(BaseModel):
     password: str
     full_name: str
     role: UserRole
+    executive_name: str | None = None
 
 
 class UserUpdate(BaseModel):
+    username: str | None = None
     full_name: str | None = None
     password: str | None = None
+    executive_name: str | None = None
     is_active: bool | None = None
 
 
@@ -101,6 +105,9 @@ class DailyReportInput(BaseModel):
     eff_fin: float | None = Field(default=None, ge=0)
     wip_dip: int | None = Field(default=None, ge=0)
     wip_pre_pi: int | None = Field(default=None, ge=0)
+    wip_reason_machine: bool = False
+    wip_reason_line_spread: bool = False
+    wip_reason_semi_finished: bool = False
     issue_note: str | None = None
 
     @field_validator("buyer")
@@ -126,6 +133,9 @@ class DailyReportOut(BaseModel):
     eff_fin: float | None
     wip_dip: int | None
     wip_pre_pi: int | None
+    wip_reason_machine: bool
+    wip_reason_line_spread: bool
+    wip_reason_semi_finished: bool
     issue_note: str | None
     is_submitted: bool
     is_locked: bool
@@ -181,6 +191,9 @@ class LineDaySummary(BaseModel):
     var: int | None
     wip_dip: int | None
     wip_pre_pi: int | None
+    wip_reason_machine: bool
+    wip_reason_line_spread: bool
+    wip_reason_semi_finished: bool
     issue_note: str | None
     is_submitted: bool
     is_locked: bool

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_thu_ky_or_sep
-from app.models import Line, User, UserRole
+from app.models import DailyReport, Line, ReportHistory, User, UserRole
 from app.schemas import LineCreate, LineOut, LineUpdate
 
 router = APIRouter(prefix="/api/lines", tags=["lines"])
@@ -28,6 +28,8 @@ def list_lines(
 
     if current_user.role == UserRole.to_truong:
         stmt = stmt.where(Line.to_truong_user_id == current_user.id)
+    elif current_user.role == UserRole.executive:
+        stmt = stmt.where(Line.executive_name == current_user.executive_name)
 
     stmt = stmt.order_by(Line.pu_group, Line.executive_name, Line.display_order, Line.line_number)
     lines = db.scalars(stmt).all()
@@ -64,4 +66,20 @@ def deactivate_line(line_id: int, db: Session = Depends(get_db)):
     if line is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy line")
     line.is_active = False
+    db.commit()
+
+
+@router.delete("/{line_id}/hard", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_thu_ky_or_sep)])
+def delete_line_permanently(line_id: int, db: Session = Depends(get_db)):
+    line = db.get(Line, line_id)
+    if line is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy line")
+    # Unlike deactivate_line (soft-hide), this permanently removes the line
+    # and every daily_reports/report_history row tied to it, across every
+    # date - the report_history rows keep line_id as a plain column rather
+    # than a row they describe (see ReportHistory's docstring), but once the
+    # Line itself is gone there is nothing left for that trail to refer to.
+    db.query(ReportHistory).filter(ReportHistory.line_id == line_id).delete()
+    db.query(DailyReport).filter(DailyReport.line_id == line_id).delete()
+    db.delete(line)
     db.commit()

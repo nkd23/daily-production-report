@@ -6,6 +6,10 @@ import { Button, Input, Label, Select } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { PuGroup, User } from "@/lib/types";
 
+// sam/target_output/target_eff have no input here anymore - SAM and Target
+// are entered fresh by the Tổ trưởng every day (see aggregation.py's module
+// docstring), so these just go in as bootstrap zeros the backend still
+// requires on create.
 const emptyState = {
   line_number: "",
   executive_name: "",
@@ -18,7 +22,15 @@ const emptyState = {
   display_order: 0,
 };
 
-export function AddLineForm({ toTruongs, onCreated }: { toTruongs: User[]; onCreated: () => void }) {
+export function AddLineForm({
+  toTruongs,
+  executiveNames,
+  onCreated,
+}: {
+  toTruongs: User[];
+  executiveNames: string[];
+  onCreated: () => void;
+}) {
   const [form, setForm] = useState(emptyState);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +51,10 @@ export function AddLineForm({ toTruongs, onCreated }: { toTruongs: User[]; onCre
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div>
         <Label>Line</Label>
-        <Input required value={form.line_number} onChange={(e) => setForm({ ...form, line_number: e.target.value })} placeholder="Line 6" />
+        <Input required value={form.line_number} onChange={(e) => setForm({ ...form, line_number: e.target.value })} placeholder="VD: 01AB" />
       </div>
       <div>
         <Label>PU</Label>
@@ -53,19 +65,18 @@ export function AddLineForm({ toTruongs, onCreated }: { toTruongs: User[]; onCre
       </div>
       <div>
         <Label>Executive</Label>
-        <Input required value={form.executive_name} onChange={(e) => setForm({ ...form, executive_name: e.target.value })} placeholder="Ms Thảo" />
-      </div>
-      <div>
-        <Label>SAM</Label>
-        <Input required type="number" step="0.1" value={form.sam} onChange={(e) => setForm({ ...form, sam: Number(e.target.value) })} />
-      </div>
-      <div>
-        <Label>Target Out</Label>
-        <Input required type="number" value={form.target_output} onChange={(e) => setForm({ ...form, target_output: Number(e.target.value) })} />
-      </div>
-      <div>
-        <Label>Target EFF</Label>
-        <Input required type="number" step="0.1" value={form.target_eff} onChange={(e) => setForm({ ...form, target_eff: Number(e.target.value) })} />
+        <Input
+          required
+          list="executive-name-options"
+          value={form.executive_name}
+          onChange={(e) => setForm({ ...form, executive_name: e.target.value })}
+          placeholder="Ms Thảo"
+        />
+        <datalist id="executive-name-options">
+          {executiveNames.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
       </div>
       <div>
         <Label>Tổ trưởng</Label>
@@ -82,7 +93,7 @@ export function AddLineForm({ toTruongs, onCreated }: { toTruongs: User[]; onCre
         </Select>
       </div>
 
-      <div className="col-span-2 flex items-end gap-2 sm:col-span-4 lg:col-span-8">
+      <div className="col-span-2 flex items-end gap-2 sm:col-span-4">
         {error ? <p className="text-xs text-danger">{error}</p> : null}
         <Button type="submit" disabled={saving} size="sm">
           <Plus size={14} /> {saving ? "Đang thêm..." : "Thêm Line"}

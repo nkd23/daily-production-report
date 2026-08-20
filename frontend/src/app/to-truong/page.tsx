@@ -48,7 +48,12 @@ function ToTruongContent() {
         <Input
           type="date"
           value={reportDate}
-          onChange={(e) => setReportDate(e.target.value)}
+          max={todayISO()}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v > todayISO()) return;
+            setReportDate(v);
+          }}
           className="w-auto"
         />
       }

@@ -23,6 +23,7 @@ class UserRole(str, enum.Enum):
     to_truong = "to_truong"
     thu_ky = "thu_ky"
     sep = "sep"
+    executive = "executive"
 
 
 class PuGroup(str, enum.Enum):
@@ -38,6 +39,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Unicode(255), nullable=False)
     full_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    # Only set for role=executive - must match a Line.executive_name exactly
+    # (e.g. "Ms Thảo") so the dashboard can be scoped to just that person's
+    # own lines. Unused/null for every other role.
+    executive_name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
 
@@ -51,12 +56,13 @@ class Line(Base):
     line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
     executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
-    # Bootstrap-only default SAM/target - the Tổ trưởng entry form never reads
-    # this (every day must have its own SAM/target entered by hand, see
-    # routers/reports.py's _resolve_day_target). Only used as a last-resort
-    # fallback inside VAR/dashboard math for a report that has output but was
-    # never given its own target (see _report_out and
-    # app.services.aggregation.build_line_summaries).
+    # Not read anywhere in the app's calculations - every day's SAM/target
+    # must be entered on that day's own daily_reports row (see
+    # routers/reports.py's _resolve_day_target, app.services.aggregation.
+    # build_line_summaries, and _report_out's VAR calc, none of which fall
+    # back to this field). Only editable via "Cấu hình Line", purely for
+    # admin reference - has no effect on the Dashboard, entry form, or Excel
+    # export.
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     target_output: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
@@ -111,6 +117,12 @@ class DailyReport(Base):
     # being carried over, since the numbers are not comparable.
     wip_dip: Mapped[int | None] = mapped_column(Integer, nullable=True)
     wip_pre_pi: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Reason tags for the day's WIP (tồn), applying to the report as a whole
+    # rather than to wip_dip/wip_pre_pi individually - a Tổ trưởng may check
+    # any combination of these.
+    wip_reason_machine: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    wip_reason_line_spread: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    wip_reason_semi_finished: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     issue_note: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
     is_submitted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

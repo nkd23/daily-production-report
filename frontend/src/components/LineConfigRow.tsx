@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Trash2 } from "lucide-react";
+import { Check, Trash, Trash2 } from "lucide-react";
 import { Badge, Button, Input, Select } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { Line, PuGroup, User } from "@/lib/types";
@@ -25,6 +25,10 @@ export function LineConfigRow({
     setSaving(true);
     setError(null);
     try {
+      // sam/target_output/target_eff have no input in this row anymore (SAM
+      // and Target are entered fresh per day by the Tổ trưởng, not edited
+      // here) - pass the untouched bootstrap values through unchanged since
+      // the API still requires them on every update.
       await api.updateLine(line.id, {
         line_number: form.line_number,
         executive_name: form.executive_name,
@@ -49,28 +53,35 @@ export function LineConfigRow({
     onChanged();
   }
 
+  async function deletePermanently() {
+    if (
+      !confirm(
+        `Xóa HẲN line ${line.line_number}? Toàn bộ báo cáo sản lượng và lịch sử chỉnh sửa của line này ở mọi ngày sẽ bị xóa vĩnh viễn, không thể khôi phục.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.deleteLinePermanently(line.id);
+      onChanged();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Không xóa được line");
+    }
+  }
+
   return (
     <tr className="border-b border-border last:border-0">
       <td className="px-3 py-2">
         <Input value={form.line_number} onChange={(e) => setForm({ ...form, line_number: e.target.value })} className="w-24" />
       </td>
       <td className="px-3 py-2">
-        <Select value={form.pu_group} onChange={(e) => setForm({ ...form, pu_group: e.target.value as PuGroup })} className="w-24">
+        <Select value={form.pu_group} onChange={(e) => setForm({ ...form, pu_group: e.target.value as PuGroup })} className="!w-28">
           <option value="PU1">PU1</option>
           <option value="PU2">PU2</option>
         </Select>
       </td>
       <td className="px-3 py-2">
         <Input value={form.executive_name} onChange={(e) => setForm({ ...form, executive_name: e.target.value })} className="w-32" />
-      </td>
-      <td className="px-3 py-2">
-        <Input type="number" step="0.1" value={form.sam} onChange={(e) => setForm({ ...form, sam: Number(e.target.value) })} className="w-20" />
-      </td>
-      <td className="px-3 py-2">
-        <Input type="number" value={form.target_output} onChange={(e) => setForm({ ...form, target_output: Number(e.target.value) })} className="w-24" />
-      </td>
-      <td className="px-3 py-2">
-        <Input type="number" step="0.1" value={form.target_eff} onChange={(e) => setForm({ ...form, target_eff: Number(e.target.value) })} className="w-20" />
       </td>
       <td className="px-3 py-2">
         <Select
@@ -97,6 +108,9 @@ export function LineConfigRow({
           ) : null}
           <Button size="sm" variant="ghost" onClick={deactivate} title="Ẩn line">
             <Trash2 size={14} className="text-danger" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={deletePermanently} title="Xóa hẳn line (không thể khôi phục)">
+            <Trash size={14} className="text-danger" />
           </Button>
         </div>
       </td>

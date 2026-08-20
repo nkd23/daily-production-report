@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import local_today, require_thu_ky_or_sep
+from app.deps import get_current_user, local_today, require_dashboard_viewer
+from app.models import User, UserRole
 from app.schemas import DashboardResponse
 from app.services.aggregation import build_dashboard
 
 router = APIRouter(
-    prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_thu_ky_or_sep)]
+    prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_dashboard_viewer)]
 )
 
 
@@ -21,6 +22,8 @@ def _default_dashboard_date() -> date:
 @router.get("/summary", response_model=DashboardResponse)
 def dashboard_summary(
     report_date: date = Query(default_factory=_default_dashboard_date),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return build_dashboard(db, report_date)
+    scope = current_user.executive_name if current_user.role == UserRole.executive else None
+    return build_dashboard(db, report_date, executive_scope=scope)

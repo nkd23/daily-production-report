@@ -19,6 +19,9 @@ const FIELD_LABELS: Record<keyof ReportHistoryValues, string> = {
   eff_fin: "EFF-FIN (%)",
   wip_dip: "Tồn Dip",
   wip_pre_pi: "Tồn trước PI",
+  wip_reason_machine: "Tồn do máy",
+  wip_reason_line_spread: "Tồn do rải chuyền",
+  wip_reason_semi_finished: "Tồn do bán thành phẩm",
   issue_note: "Issue / Lí do",
 };
 
@@ -34,8 +37,9 @@ const ACTION_ICON: Record<ReportHistoryEntry["action"], typeof ClipboardEdit> = 
   delete: Trash2,
 };
 
-function fmt(v: string | number | null): string {
+function fmt(v: string | number | boolean | null): string {
   if (v === null || v === undefined || v === "") return "trống";
+  if (typeof v === "boolean") return v ? "Có" : "Không";
   return String(v);
 }
 

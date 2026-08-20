@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     report_lock_hour: int = 21
     cors_origins: str = "http://localhost:3000"
     app_timezone: str = "Asia/Ho_Chi_Minh"
+    # Reports/history older than this many days are purged automatically -
+    # see app.services.retention. 0 disables the purge entirely.
+    data_retention_days: int = 60
 
     @property
     def cors_origin_list(self) -> list[str]:

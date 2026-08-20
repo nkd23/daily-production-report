@@ -14,13 +14,39 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Download, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Gauge,
+  LayoutDashboard,
+  PackageCheck,
+  RefreshCw,
+  Scissors,
+  Target,
+} from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { Badge, Button, Card, Input, StatCard } from "@/components/ui";
+import { EffPanel } from "@/components/EffDashboard";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { effClass } from "@/lib/eff-thresholds";
+import { execColor } from "@/lib/exec-colors";
 import { useSharedReportDate } from "@/lib/report-date-context";
+import { wipExceedsOutClass } from "@/lib/wip-alert";
 import type { DashboardResponse } from "@/lib/types";
+
+type Tab = "overview" | "eff-sew" | "eff-fin";
+
+// EFF-SEW tab tạm thời ẩn khỏi thanh tab theo yêu cầu - target hiệu suất
+// SEW giờ chỉ có ý nghĩa để so sánh trong tab EFF-FIN, không cần 1 tab riêng.
+// "eff-sew" vẫn còn trong type Tab/logic render bên dưới nên chỉ cần thêm
+// lại dòng entry này vào TABS là bật lại được ngay.
+const TABS: { key: Tab; label: string; title: string; icon: typeof LayoutDashboard }[] = [
+  { key: "overview", label: "Tổng quan", title: "Dashboard sản lượng", icon: LayoutDashboard },
+  { key: "eff-fin", label: "EFF-FIN", title: "Dashboard EFF-FIN", icon: PackageCheck },
+];
 
 function yesterdayISO() {
   const d = new Date();
@@ -42,32 +68,10 @@ function fmt(n: number | null | undefined, suffix = "") {
   return `${n.toLocaleString("vi-VN")}${suffix}`;
 }
 
-// One color per Executive (the person whose Tổ trưởng report up to them,
-// not a Tổ trưởng themselves) so their lines are visually grouped in charts.
-// Target bar = lighter tint, Thực tế bar = solid, of the same hue.
-const EXEC_COLORS: Record<string, { light: string; solid: string }> = {
-  "Ms Thảo": { light: "#fbbf24", solid: "#b45309" }, // amber
-  "Ms Hương": { light: "#a78bfa", solid: "#5b21b6" }, // violet
-  "Ms Doan": { light: "#34d399", solid: "#047857" }, // emerald
-  "Ms Phương": { light: "#60a5fa", solid: "#1d4ed8" }, // blue
-  "Ms Huệ": { light: "#f472b6", solid: "#be185d" }, // pink
-};
-const FALLBACK_COLOR = { light: "#94a3b8", solid: "#334155" }; // slate, for any other Executive
-function execColor(name: string) {
-  return EXEC_COLORS[name] ?? FALLBACK_COLOR;
-}
-
-// Mirrors EFF_WARNING_THRESHOLD / EFF_CRITICAL_THRESHOLD in
-// backend/app/services/excel_export.py - keep in sync. Not yet confirmed
-// with the factory, adjust both places together if the real cutoffs change.
-const EFF_WARNING_THRESHOLD = 0.75;
-const EFF_CRITICAL_THRESHOLD = 0.6;
+// Only the Executive subtotal rows get color-coded here - PU/TTL rows are
+// aggregates of aggregates and not meaningful against a single target_eff.
 function effCellClass(actual: number | null, target: number | null, level: string) {
-  if (level !== "executive" || actual === null || !target) return "";
-  const ratio = actual / target;
-  if (ratio < EFF_CRITICAL_THRESHOLD) return "bg-danger-soft text-danger font-semibold";
-  if (ratio < EFF_WARNING_THRESHOLD) return "bg-warning-soft text-warning font-semibold";
-  return "";
+  return level !== "executive" ? "" : effClass(actual, target);
 }
 
 interface LineChartRow {
@@ -132,28 +136,18 @@ interface PieChartRow {
   value: number;
 }
 
-function ExecPieTooltip({ active, payload }: { active?: boolean; payload?: { payload: PieChartRow }[] }) {
-  if (!active || !payload || payload.length === 0) return null;
-  const row = payload[0].payload;
-  const colors = execColor(row.name);
-  return (
-    <div className="rounded-lg border border-border bg-surface p-3 text-sm shadow-lg">
-      <div className="flex items-center gap-2">
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors.solid }} />
-        <span className="font-semibold text-foreground">{row.name}</span>
-      </div>
-      <p className="mt-1 text-muted">
-        Thực tế: <span className="font-medium text-foreground">{row.value.toLocaleString("vi-VN")}</span>
-      </p>
-    </div>
-  );
-}
-
 function DashboardContent() {
+  const { user } = useAuth();
+  // Excel export is a whole-company report - the backend only allows
+  // thu_ky/sep to call it, so an Executive account (scoped to one person's
+  // lines) never sees a button that would just 403.
+  const canExport = user?.role !== "executive";
   const [reportDate, setReportDate] = useSharedReportDate(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("overview");
+  const activeTab = TABS.find((t) => t.key === tab)!;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -205,9 +199,18 @@ function DashboardContent() {
   });
   const pieData: PieChartRow[] = [...pieDataMap.entries()].map(([name, value]) => ({ name, value }));
 
+  const wipReasonLines = (data?.lines ?? []).filter(
+    (l) => l.wip_reason_machine || l.wip_reason_line_spread || l.wip_reason_semi_finished
+  );
+  const wipReasonCounts = [
+    { name: "Do máy", value: (data?.lines ?? []).filter((l) => l.wip_reason_machine).length, color: "var(--warning)" },
+    { name: "Rải chuyền", value: (data?.lines ?? []).filter((l) => l.wip_reason_line_spread).length, color: "var(--primary)" },
+    { name: "Bán thành phẩm", value: (data?.lines ?? []).filter((l) => l.wip_reason_semi_finished).length, color: "var(--pu2)" },
+  ];
+
   return (
     <PageShell
-      title="Dashboard sản lượng"
+      title={activeTab.title}
       description={formatVietnameseDate(reportDate)}
       actions={
         <>
@@ -215,22 +218,49 @@ function DashboardContent() {
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Làm mới
           </Button>
-          <Button size="sm" disabled={exporting} onClick={handleExport}>
-            <Download size={14} /> {exporting ? "Đang xuất..." : "Xuất Excel"}
-          </Button>
+          {canExport ? (
+            <Button size="sm" disabled={exporting} onClick={handleExport}>
+              <Download size={14} /> {exporting ? "Đang xuất..." : "Xuất Excel"}
+            </Button>
+          ) : null}
         </>
       }
     >
+      <div className="mb-6 inline-flex items-center gap-1 rounded-xl border border-border bg-surface-muted p-1">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const isActive = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                isActive ? "bg-surface text-primary shadow-sm" : "text-muted hover:text-foreground"
+              }`}
+            >
+              <Icon size={15} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
       {loading || !data ? (
         <p className="text-sm text-muted">Đang tải...</p>
+      ) : tab === "eff-sew" ? (
+        <EffPanel metric="sew" data={data} />
+      ) : tab === "eff-fin" ? (
+        <EffPanel metric="fin" data={data} />
       ) : (
         <div className="flex flex-col gap-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatCard label="Target Output" value={fmt(data.kpi.total_target_output)} />
+            <StatCard label="Target Output" value={fmt(data.kpi.total_target_output)} icon={Target} />
             <StatCard
               label="Actual Output"
               value={fmt(data.kpi.total_actual_output)}
               tone={data.kpi.total_actual_output >= data.kpi.total_target_output ? "success" : "danger"}
+              icon={PackageCheck}
             />
             <StatCard
               label="% Hoàn thành"
@@ -242,14 +272,16 @@ function DashboardContent() {
                     ? "danger"
                     : "warning"
               }
+              icon={CheckCircle2}
             />
-            <StatCard label="EFF SEW TB" value={data.kpi.avg_eff_sew !== null ? `${data.kpi.avg_eff_sew}%` : "-"} tone="primary" />
-            <StatCard label="EFF FIN TB" value={data.kpi.avg_eff_fin !== null ? `${data.kpi.avg_eff_fin}%` : "-"} tone="primary" />
+            <StatCard label="EFF SEW TB" value={data.kpi.avg_eff_sew !== null ? `${data.kpi.avg_eff_sew}%` : "-"} tone="primary" icon={Gauge} />
+            <StatCard label="EFF FIN TB" value={data.kpi.avg_eff_fin !== null ? `${data.kpi.avg_eff_fin}%` : "-"} tone="primary" icon={Gauge} />
             <StatCard
               label="Line có Issue"
               value={String(data.kpi.lines_with_issue)}
               sub={`${data.kpi.lines_submitted}/${data.kpi.lines_total} line đã nộp`}
               tone={data.kpi.lines_with_issue > 0 ? "warning" : "success"}
+              icon={AlertTriangle}
             />
           </div>
 
@@ -274,7 +306,7 @@ function DashboardContent() {
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={lineChartData} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip content={<LineChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
                   <Bar dataKey="Target" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false}>
@@ -292,56 +324,56 @@ function DashboardContent() {
             )}
           </Card>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card className="p-5">
-              <h2 className="mb-4 text-sm font-semibold text-foreground">Tổng hợp theo Executive / PU</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
-                  <Tooltip content={<ExecChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
-                  <Bar dataKey="Target" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
-                    {execChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={execColor(entry.executive).light} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
-                    {execChartData.map((entry, idx) => (
-                      <Cell key={idx} fill={execColor(entry.executive).solid} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
+          <Card className="p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">Tổng hợp theo Executive / PU</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={execChartData} layout="vertical" margin={{ left: 40 }} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={140} />
+                <Tooltip content={<ExecChartTooltip />} cursor={{ fill: "#f1f5f9" }} />
+                <Bar dataKey="Target" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
+                  {execChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={execColor(entry.executive).light} />
+                  ))}
+                </Bar>
+                <Bar dataKey="Thực tế" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
+                  {execChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={execColor(entry.executive).solid} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
 
-            <Card className="p-5">
-              <h2 className="mb-4 text-sm font-semibold text-foreground">Tỷ trọng Output thực tế theo Executive</h2>
-              {pieData.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted">Chưa có line nào nộp báo cáo ngày này.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={300}>
+          <Card className="p-5">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+              <PackageCheck size={16} className="text-warning" /> Lý do tồn
+            </h2>
+            {wipReasonLines.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted">Không có line nào ghi nhận lý do tồn ngày này.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <ResponsiveContainer width="100%" height={360}>
                   <PieChart>
                     <Pie
-                      data={pieData}
+                      data={wipReasonCounts.filter((r) => r.value > 0)}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={2}
+                      outerRadius={130}
                       isAnimationActive={false}
-                      label={(entry: { name?: string; percent?: number }) =>
-                        `${entry.name}: ${entry.percent ? Math.round(entry.percent * 100) : 0}%`
-                      }
+                      label={(entry: { value?: number }) => entry.value}
                       labelLine={false}
                     >
-                      {pieData.map((entry, idx) => (
-                        <Cell key={idx} fill={execColor(entry.name).solid} />
-                      ))}
+                      {wipReasonCounts
+                        .filter((r) => r.value > 0)
+                        .map((entry, idx) => (
+                          <Cell key={idx} fill={entry.color} />
+                        ))}
                     </Pie>
-                    <Tooltip content={<ExecPieTooltip />} />
+                    <Tooltip formatter={(v) => [`${v} line`, "Số line"]} />
                     <Legend
                       verticalAlign="bottom"
                       height={36}
@@ -349,9 +381,73 @@ function DashboardContent() {
                     />
                   </PieChart>
                 </ResponsiveContainer>
-              )}
-            </Card>
-          </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                        <th className="py-2 pr-3 font-medium">Line</th>
+                        <th className="py-2 pr-3 font-medium">Executive</th>
+                        <th className="py-2 pr-3 font-medium">Lý do</th>
+                        <th className="py-2 font-medium">Ghi chú</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wipReasonLines.map((l) => (
+                        <tr key={l.line_id} className="border-b border-border last:border-0">
+                          <td className="py-2 pr-3 font-medium">{l.line_number}</td>
+                          <td className="py-2 pr-3 text-muted">{l.executive_name}</td>
+                          <td className="py-2 pr-3">
+                            <div className="flex flex-wrap gap-1">
+                              {l.wip_reason_machine ? <Badge tone="warning">Do máy</Badge> : null}
+                              {l.wip_reason_line_spread ? <Badge tone="primary">Rải chuyền</Badge> : null}
+                              {l.wip_reason_semi_finished ? <Badge tone="pu2">Bán thành phẩm</Badge> : null}
+                            </div>
+                          </td>
+                          <td className="py-2 text-muted">{l.issue_note || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">Tỷ trọng Output thực tế theo Executive</h2>
+            {pieData.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted">Chưa có line nào nộp báo cáo ngày này.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex h-6 w-full overflow-hidden rounded-full bg-surface-muted">
+                  {pieData.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      title={`${entry.name}: ${entry.value.toLocaleString("vi-VN")}`}
+                      style={{
+                        width: `${(entry.value / pieData.reduce((sum, x) => sum + x.value, 0)) * 100}%`,
+                        backgroundColor: execColor(entry.name).solid,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                  {pieData.map((entry) => (
+                    <span key={entry.name} className="flex items-center gap-1.5 text-xs text-muted">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: execColor(entry.name).solid }}
+                      />
+                      {entry.name}:{" "}
+                      <span className="font-medium text-foreground">
+                        {Math.round((entry.value / pieData.reduce((sum, x) => sum + x.value, 0)) * 100)}%
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
 
           <Card className="overflow-hidden p-0">
             <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">
@@ -377,7 +473,14 @@ function DashboardContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data.summary_table ?? []).map((row, idx) => (
+                  {(data.summary_table ?? []).map((row, idx) => {
+                    // On the TTL row (already bg-primary) the danger tint
+                    // would be invisible - fall back to a bold underline so
+                    // it still reads as a flag.
+                    const wipAlert = wipExceedsOutClass(row.wip_pre_pi, row.out_fin_fin);
+                    const wipCellCls =
+                      row.level === "ttl" && wipAlert ? "underline decoration-2 underline-offset-2 font-bold" : wipAlert;
+                    return (
                     <tr
                       key={idx}
                       className={
@@ -404,11 +507,11 @@ function DashboardContent() {
                       <td className="px-4 py-2 text-right">{row.sam_avg ?? "-"}</td>
                       <td className="px-4 py-2 text-right">{row.shift_total || "-"}</td>
                       <td className="px-4 py-2 text-right">{row.out_sew.toLocaleString("vi-VN")}</td>
-                      <td className={`px-4 py-2 text-right ${effCellClass(row.eff_sew_avg, row.target_eff_avg, row.level)}`}>
+                      <td className="px-4 py-2 text-right">
                         {row.eff_sew_avg !== null ? `${row.eff_sew_avg}%` : "-"}
                       </td>
                       <td className="px-4 py-2 text-right">{row.out_fin_scanpack.toLocaleString("vi-VN")}</td>
-                      <td className="px-4 py-2 text-right">{row.out_fin_fin.toLocaleString("vi-VN")}</td>
+                      <td className={`px-4 py-2 text-right ${wipCellCls}`}>{row.out_fin_fin.toLocaleString("vi-VN")}</td>
                       <td className={`px-4 py-2 text-right ${effCellClass(row.eff_fin_avg, row.target_eff_avg, row.level)}`}>
                         {row.eff_fin_avg !== null ? `${row.eff_fin_avg}%` : "-"}
                       </td>
@@ -416,9 +519,15 @@ function DashboardContent() {
                         {row.var.toLocaleString("vi-VN")}
                       </td>
                       <td className="px-4 py-2 text-right">{row.wip_dip.toLocaleString("vi-VN")}</td>
-                      <td className="px-4 py-2 text-right">{row.wip_pre_pi.toLocaleString("vi-VN")}</td>
+                      <td
+                        className={`px-4 py-2 text-right ${wipCellCls}`}
+                        title={wipAlert ? "Tồn trước PI đang nhiều hơn OUT-FIN (Fin)" : undefined}
+                      >
+                        {row.wip_pre_pi.toLocaleString("vi-VN")}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {!data.summary_table || data.summary_table.length === 0 ? (
                     <tr>
                       <td colSpan={13} className="px-4 py-8 text-center text-sm text-muted">
@@ -431,55 +540,31 @@ function DashboardContent() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card className="p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <AlertTriangle size={16} className="text-warning" /> Issue trong ngày
-              </h2>
-              {data.issues.length === 0 ? (
-                <p className="text-sm text-muted">Không có issue nào được ghi nhận.</p>
-              ) : (
-                <ul className="flex flex-col gap-3">
-                  {data.issues.map((issue, idx) => (
-                    <li key={idx} className="rounded-lg border border-border bg-surface-muted p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        {issue.line_number}
-                        <Badge tone="default">{issue.buyer}</Badge>
-                        <span className="text-xs font-normal text-muted">{issue.executive_name}</span>
-                      </div>
-                      <p className="mt-1 text-sm text-muted">{issue.issue_note}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-
-            <Card className="overflow-hidden p-0">
-              <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">Trạng thái nộp báo cáo</h2>
-              <div className="mt-3 max-h-[360px] overflow-y-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-surface">
-                    <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                      <th className="px-5 py-2 font-medium">Line</th>
-                      <th className="px-5 py-2 font-medium">Executive</th>
-                      <th className="px-5 py-2 font-medium">Trạng thái</th>
+          <Card className="overflow-hidden p-0">
+            <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">Trạng thái nộp báo cáo</h2>
+            <div className="mt-3 max-h-[360px] overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-surface">
+                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                    <th className="px-5 py-2 font-medium">Line</th>
+                    <th className="px-5 py-2 font-medium">Executive</th>
+                    <th className="px-5 py-2 font-medium">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.lines.map((l) => (
+                    <tr key={l.line_id} className="border-b border-border last:border-0">
+                      <td className="px-5 py-2 font-medium">{l.line_number}</td>
+                      <td className="px-5 py-2 text-muted">{l.executive_name}</td>
+                      <td className="px-5 py-2">
+                        {l.is_submitted ? <Badge tone="success">Đã nộp</Badge> : <Badge tone="warning">Chưa nộp</Badge>}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {data.lines.map((l) => (
-                      <tr key={l.line_id} className="border-b border-border last:border-0">
-                        <td className="px-5 py-2 font-medium">{l.line_number}</td>
-                        <td className="px-5 py-2 text-muted">{l.executive_name}</td>
-                        <td className="px-5 py-2">
-                          {l.is_submitted ? <Badge tone="success">Đã nộp</Badge> : <Badge tone="warning">Chưa nộp</Badge>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )}
     </PageShell>
@@ -488,7 +573,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <RequireRole roles={["thu_ky", "sep"]}>
+    <RequireRole roles={["thu_ky", "sep", "executive"]}>
       <DashboardContent />
     </RequireRole>
   );

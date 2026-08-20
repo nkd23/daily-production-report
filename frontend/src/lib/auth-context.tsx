@@ -59,11 +59,13 @@ export function useAuth() {
 export const roleLabel: Record<User["role"], string> = {
   to_truong: "Tổ trưởng",
   thu_ky: "Thư ký",
-  sep: "Sếp",
+  sep: "Manager",
+  executive: "Executive",
 };
 
 export const roleHomePath: Record<User["role"], string> = {
   to_truong: "/to-truong",
   thu_ky: "/thu-ky",
   sep: "/dashboard",
+  executive: "/dashboard",
 };

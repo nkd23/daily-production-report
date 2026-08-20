@@ -65,20 +65,23 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
         eff_fin = float(report.eff_fin) if report and report.eff_fin is not None else None
         # shift_count (the factory's "tổng số Ca") is the weight for EFF%
         # averaging across lines: SUMPRODUCT(Shift, EFF%) / SUM(Shift). A line
-        # that reported no EFF value for the day is dropped from the divisor
-        # too (the original sheet's EFF-FIN subtotals divide by 11/21/53
-        # rather than the full 13/23/55).
+        # that reported no EFF value for the day - or an explicit 0, entered
+        # because the Tổ trưởng ran no real production that day rather than a
+        # genuine 0% efficiency - is dropped from the divisor too (the
+        # original sheet's EFF-FIN subtotals divide by 11/21/53 rather than
+        # the full 13/23/55).
         shift_weight = report.shift_count if report else 0
         shift_display = str(report.shift_count) if report else "-"
-        eff_sew_weight = shift_weight if eff_sew is not None else 0
-        eff_fin_weight = shift_weight if eff_fin is not None else 0
+        eff_sew_weight = shift_weight if eff_sew else 0
+        eff_fin_weight = shift_weight if eff_fin else 0
 
-        # Only report_date's own row counts - no history lookback here (see
-        # module docstring). A line nobody touched today falls back to the
-        # Line's static admin-configured default, not to a past day's edit.
-        sam = float(report.sam) if report and report.sam is not None else float(line.sam)
-        target_output = report.target_output if report and report.target_output is not None else line.target_output
-        target_eff = float(report.target_eff) if report and report.target_eff is not None else float(line.target_eff)
+        # Only report_date's own row counts - no history lookback and no
+        # falling back to the Line's "Cấu hình Line" default (see module
+        # docstring). A line nobody touched today shows 0/blank, so it can't
+        # silently inflate a KPI/subtotal it never actually contributed to.
+        sam = float(report.sam) if report and report.sam is not None else 0.0
+        target_output = report.target_output if report and report.target_output is not None else 0
+        target_eff = float(report.target_eff) if report and report.target_eff is not None else 0.0
 
         out_fin = report.out_fin_fin if report else None
         is_locked = (
@@ -113,6 +116,9 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 var=var,
                 wip_dip=report.wip_dip if report else None,
                 wip_pre_pi=report.wip_pre_pi if report else None,
+                wip_reason_machine=report.wip_reason_machine if report else False,
+                wip_reason_line_spread=report.wip_reason_line_spread if report else False,
+                wip_reason_semi_finished=report.wip_reason_semi_finished if report else False,
                 issue_note=report.issue_note if report else None,
                 is_submitted=report.is_submitted if report else False,
                 is_locked=is_locked,
@@ -239,13 +245,26 @@ def build_issue_list(lines: list[LineDaySummary]) -> list[IssueItem]:
     ]
 
 
-def build_dashboard(db: Session, report_date: date) -> DashboardResponse:
+def build_dashboard(db: Session, report_date: date, executive_scope: str | None = None) -> DashboardResponse:
+    """executive_scope restricts every part of the response to one
+    Executive's own lines - used for the "executive" role, whose accounts
+    should only ever see their own group (see routers/dashboard.py). PU/TTL
+    subtotal rows are dropped in that case since they would just duplicate
+    the single Executive row now that no other Executive's lines are mixed in.
+    """
     lines = build_line_summaries(db, report_date)
+    if executive_scope is not None:
+        lines = [l for l in lines if l.executive_name == executive_scope]
+
+    summary_table = build_summary_table(lines)
+    if executive_scope is not None:
+        summary_table = [r for r in summary_table if r.level == "executive"]
+
     return DashboardResponse(
         report_date=report_date,
         kpi=build_kpi_summary(lines),
         lines=lines,
         executives=build_executive_summaries(lines),
-        summary_table=build_summary_table(lines),
+        summary_table=summary_table,
         issues=build_issue_list(lines),
     )

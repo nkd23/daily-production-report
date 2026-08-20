@@ -38,7 +38,7 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
       <tr className="border-b border-border last:border-0 hover:bg-surface-muted/60">
         <td className="whitespace-nowrap px-4 py-3 font-medium">{summary.line_number}</td>
         <td className="px-4 py-3">
-          <Badge tone="primary">{summary.pu_group}</Badge>
+          <Badge tone={summary.pu_group === "PU1" ? "pu1" : "pu2"}>{summary.pu_group}</Badge>
         </td>
         <td className="px-4 py-3 text-muted">{summary.executive_name}</td>
         <td className="px-4 py-3 text-muted">{summary.buyer ?? "-"}</td>

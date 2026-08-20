@@ -1,4 +1,4 @@
-export type UserRole = "to_truong" | "thu_ky" | "sep";
+export type UserRole = "to_truong" | "thu_ky" | "sep" | "executive";
 export type PuGroup = "PU1" | "PU2";
 
 export interface User {
@@ -6,6 +6,7 @@ export interface User {
   username: string;
   full_name: string;
   role: UserRole;
+  executive_name: string | null;
   is_active: boolean;
 }
 
@@ -36,6 +37,9 @@ export interface DailyReport {
   eff_fin: number | null;
   wip_dip: number | null;
   wip_pre_pi: number | null;
+  wip_reason_machine: boolean;
+  wip_reason_line_spread: boolean;
+  wip_reason_semi_finished: boolean;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -59,6 +63,9 @@ export interface DailyReportInput {
   eff_fin: number | null;
   wip_dip: number | null;
   wip_pre_pi: number | null;
+  wip_reason_machine: boolean;
+  wip_reason_line_spread: boolean;
+  wip_reason_semi_finished: boolean;
   issue_note: string | null;
 }
 
@@ -83,6 +90,9 @@ export interface LineDaySummary {
   var: number | null;
   wip_dip: number | null;
   wip_pre_pi: number | null;
+  wip_reason_machine: boolean;
+  wip_reason_line_spread: boolean;
+  wip_reason_semi_finished: boolean;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -160,6 +170,9 @@ export interface ReportHistoryValues {
   eff_fin: number | null;
   wip_dip: number | null;
   wip_pre_pi: number | null;
+  wip_reason_machine: boolean | null;
+  wip_reason_line_spread: boolean | null;
+  wip_reason_semi_finished: boolean | null;
   issue_note: string | null;
 }
 

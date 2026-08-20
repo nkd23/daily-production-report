@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6fb;
+  --background: #f8fafc;
   --surface: #ffffff;
-  --surface-muted: #f8fafc;
+  --surface-muted: #f1f5f9;
   --foreground: #0f172a;
   --muted: #64748b;
   --border: #e2e8f0;
 
-  --primary: #2952e3;
-  --primary-hover: #1f3fc4;
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
   --primary-foreground: #ffffff;
-  --primary-soft: #eaefff;
+  --primary-soft: #ccfbf1;
 
   --success: #16a34a;
   --success-soft: #dcfce7;
@@ -20,8 +20,10 @@
   --danger: #dc2626;
   --danger-soft: #fee2e2;
 
-  --pu1: #2952e3;
-  --pu2: #7c3aed;
+  --pu1: #2563eb;
+  --pu1-soft: #dbeafe;
+  --pu2: #9333ea;
+  --pu2-soft: #f3e8ff;
 }
 
 @theme inline {
@@ -41,17 +43,28 @@
   --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-pu1: var(--pu1);
+  --color-pu1-soft: var(--pu1-soft);
+  --color-pu2: var(--pu2);
+  --color-pu2-soft: var(--pu2-soft);
   --font-sans: var(--font-inter);
 }
 
-* {
-  border-color: var(--border);
-}
+/* Unlayered CSS beats every Tailwind utility regardless of specificity or
+   !important (cascade layers always outrank unlayered styles) - wrapping
+   these in @layer base keeps them as just a default that any border- or
+   bg- utility class can still override, the way Tailwind's own preflight
+   does. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), "Segoe UI", Arial, sans-serif;
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), "Segoe UI", Arial, sans-serif;
+  }
 }
 
 ::-webkit-scrollbar {

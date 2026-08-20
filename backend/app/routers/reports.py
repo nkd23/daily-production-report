@@ -23,7 +23,8 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 HISTORY_FIELDS = (
     "shift_count", "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
-    "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note",
+    "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi",
+    "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "issue_note",
 )
 
 
@@ -61,14 +62,18 @@ def _record_history(
 
 
 def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
-    """VAR compares against the target entered on this exact report row, not
-    an earlier day's edit or the Line's ever-changing "current" value -
-    falls back to the Line's static default only when this day never had a
-    target of its own (see app.services.aggregation module docstring)."""
+    """VAR compares against the target entered on this exact report row only -
+    no fallback to the Line's "Cấu hình Line" default (see app.services.
+    aggregation module docstring). submit_report already requires a target
+    before output can be submitted, so report.target_output should always be
+    set in practice; var is None only for legacy rows that predate that rule."""
     out = DailyReportOut.model_validate(report)
     out.is_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-    target_output = report.target_output if report.target_output is not None else line.target_output
-    out.var = (report.out_fin_fin - target_output) if report.out_fin_fin is not None and target_output else None
+    out.var = (
+        (report.out_fin_fin - report.target_output)
+        if report.out_fin_fin is not None and report.target_output
+        else None
+    )
     return out
 
 
@@ -101,8 +106,29 @@ def _get_line_or_404(db: Session, line_id: int) -> Line:
 
 
 def _assert_line_access(current_user: User, line: Line):
+    # Executive accounts are Dashboard/Dữ liệu sản xuất viewers only (see
+    # routers/dashboard.py) - nothing in this router (entry form, target
+    # edits, submission history, delete) is theirs to touch.
+    if current_user.role == UserRole.executive:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Executive chỉ có quyền xem Dashboard")
     if current_user.role == UserRole.to_truong and line.to_truong_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không phụ trách line này")
+
+
+def _assert_date_allowed(current_user: User, report_date: date):
+    # Tổ trưởng may never enter/edit a future date - the lock-hour rule in
+    # resolve_effective_lock only locks past dates, so without this a future
+    # date is (wrongly) treated as always-open. Past dates are left entirely
+    # to the existing lock system (auto-locked once the day passes, editable
+    # again only if Thư ký explicitly unlocks it) - this does not add any new
+    # restriction there.
+    if current_user.role != UserRole.to_truong:
+        return
+    if report_date > local_today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Không thể nhập số liệu cho ngày trong tương lai",
+        )
 
 
 @router.get("/my-lines", response_model=list[LineWithReportOut])
@@ -111,6 +137,8 @@ def get_my_lines(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role == UserRole.executive:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Executive chỉ có quyền xem Dashboard")
     stmt = select(Line).where(Line.is_active == True)  # noqa: E712
     if current_user.role == UserRole.to_truong:
         stmt = stmt.where(Line.to_truong_user_id == current_user.id)
@@ -163,6 +191,40 @@ def get_line_report(
     return LineWithReportOut(line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=True)
 
 
+@router.get("/lines/{line_id}/recent", response_model=list[DailyReportOut])
+def get_recent_reports(
+    line_id: int,
+    limit: int = Query(default=30, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Chronological log of this line's past submitted reports, most recent
+    first - lets a Tổ trưởng see their own submission history (date, time,
+    OUT/EFF numbers) without paging through the date picker one day at a
+    time. Same line-ownership check as everywhere else a Tổ trưởng can act
+    on a specific line.
+
+    Only rows with a real submitted_by show up here - bulk-imported/backfill
+    data (loaded directly into the DB, not through this API) is deliberately
+    left with submitted_by NULL so it still counts everywhere else (Dashboard,
+    KPI, Excel export) but doesn't clutter this log before Tổ trưởng actually
+    start entering data by hand.
+    """
+    line = _get_line_or_404(db, line_id)
+    _assert_line_access(current_user, line)
+    reports = db.scalars(
+        select(DailyReport)
+        .where(
+            DailyReport.line_id == line_id,
+            DailyReport.is_submitted == True,  # noqa: E712
+            DailyReport.submitted_by.is_not(None),
+        )
+        .order_by(DailyReport.report_date.desc())
+        .limit(limit)
+    ).all()
+    return [_report_out(r, line) for r in reports]
+
+
 @router.post("/lines/{line_id}", response_model=DailyReportOut)
 def submit_report(
     line_id: int,
@@ -173,6 +235,7 @@ def submit_report(
 ):
     line = _get_line_or_404(db, line_id)
     _assert_line_access(current_user, line)
+    _assert_date_allowed(current_user, report_date)
 
     report = db.scalar(
         select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
@@ -196,9 +259,31 @@ def submit_report(
             detail="Vui lòng nhập SAM / Target sản lượng / Target hiệu suất cho ngày này trước khi nộp báo cáo",
         )
 
+    if (payload.out_fin_fin == 0) != (payload.eff_fin == 0):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vui lòng kiểm tra lại số liệu.",
+        )
+
+    # A day with real WIP (tồn) must say why - at least one reason checked
+    # and a note explaining it.
+    has_wip = (payload.wip_dip or 0) > 0 or (payload.wip_pre_pi or 0) > 0
+    if has_wip:
+        any_reason = payload.wip_reason_machine or payload.wip_reason_line_spread or payload.wip_reason_semi_finished
+        note_empty = not payload.issue_note or not payload.issue_note.strip()
+        if not any_reason or note_empty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vui lòng nhập lý do tồn.",
+            )
+
     old_snapshot = _snapshot(report)
 
-    for field in ("shift_count", "buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi", "issue_note"):
+    for field in (
+        "shift_count", "buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin",
+        "wip_dip", "wip_pre_pi", "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished",
+        "issue_note",
+    ):
         setattr(report, field, getattr(payload, field))
 
     report.is_submitted = True
@@ -235,6 +320,7 @@ def update_line_targets(
     """
     line = _get_line_or_404(db, line_id)
     _assert_line_access(current_user, line)
+    _assert_date_allowed(current_user, report_date)
 
     report = db.scalar(
         select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)

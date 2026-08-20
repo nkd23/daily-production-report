@@ -73,10 +73,14 @@ export const api = {
 
   listUsers: (role?: UserRole) =>
     request<User[]>(`/api/users${role ? `?role=${role}` : ""}`),
-  createUser: (payload: { username: string; password: string; full_name: string; role: UserRole }) =>
+  createUser: (payload: { username: string; password: string; full_name: string; role: UserRole; executive_name?: string | null }) =>
     request<User>("/api/users", { method: "POST", body: JSON.stringify(payload) }),
-  updateUser: (id: number, payload: Partial<{ full_name: string; password: string; is_active: boolean }>) =>
+  updateUser: (
+    id: number,
+    payload: Partial<{ username: string; full_name: string; password: string; executive_name: string; is_active: boolean }>
+  ) =>
     request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteUser: (id: number) => request<void>(`/api/users/${id}`, { method: "DELETE" }),
 
   listLines: (includeInactive = false) =>
     request<Line[]>(`/api/lines${includeInactive ? "?include_inactive=true" : ""}`),
@@ -85,6 +89,7 @@ export const api = {
   updateLine: (id: number, payload: Partial<Omit<Line, "id" | "to_truong_name">>) =>
     request<Line>(`/api/lines/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deactivateLine: (id: number) => request<void>(`/api/lines/${id}`, { method: "DELETE" }),
+  deleteLinePermanently: (id: number) => request<void>(`/api/lines/${id}/hard`, { method: "DELETE" }),
 
   myLines: (reportDate: string) =>
     request<LineWithReport[]>(`/api/reports/my-lines?report_date=${reportDate}`),
@@ -118,6 +123,8 @@ export const api = {
     request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}`, { method: "DELETE" }),
   getReportHistory: (lineId: number, reportDate: string) =>
     request<ReportHistoryEntry[]>(`/api/reports/lines/${lineId}/history?report_date=${reportDate}`),
+  getRecentReports: (lineId: number, limit = 30) =>
+    request<DailyReport[]>(`/api/reports/lines/${lineId}/recent?limit=${limit}`),
 
   dashboardSummary: (reportDate: string) =>
     request<DashboardResponse>(`/api/dashboard/summary?report_date=${reportDate}`),

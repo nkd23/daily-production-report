@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Download, ListChecks, RefreshCw } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { ThuKyLineRow } from "@/components/ThuKyLineRow";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, StatCard } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSharedReportDate } from "@/lib/report-date-context";
 import type { DashboardResponse } from "@/lib/types";
@@ -56,22 +56,10 @@ function ThuKyContent() {
     >
       {data ? (
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Card className="p-4">
-            <p className="text-xs text-muted">Tổng số Line</p>
-            <p className="mt-1 text-xl font-semibold">{data.kpi.lines_total}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-muted">Đã nộp</p>
-            <p className="mt-1 text-xl font-semibold text-success">{data.kpi.lines_submitted}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-muted">Chưa nộp</p>
-            <p className="mt-1 text-xl font-semibold text-warning">{notSubmitted}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-muted">Line có Issue</p>
-            <p className="mt-1 text-xl font-semibold text-danger">{data.kpi.lines_with_issue}</p>
-          </Card>
+          <StatCard label="Tổng số Line" value={String(data.kpi.lines_total)} icon={ListChecks} />
+          <StatCard label="Đã nộp" value={String(data.kpi.lines_submitted)} tone="success" icon={CheckCircle2} />
+          <StatCard label="Chưa nộp" value={String(notSubmitted)} tone="warning" icon={Clock3} />
+          <StatCard label="Line có Issue" value={String(data.kpi.lines_with_issue)} tone="danger" icon={AlertTriangle} />
         </div>
       ) : null}
 

@@ -37,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,_#eef2ff,_#f4f6fb_55%)] px-4 py-12">
+    <div className="flex min-h-screen flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,_#ccfbf1,_#f8fafc_55%)] px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30">
@@ -99,7 +99,7 @@ export default function LoginPage() {
           </Button>
 
           <p className="mt-4 text-center text-xs text-muted">
-            Quên mật khẩu? Liên hệ Thư ký hoặc Sếp để được đặt lại.
+            Quên mật khẩu? Liên hệ Thư ký hoặc Manager để được đặt lại.
           </p>
         </form>
       </div>
