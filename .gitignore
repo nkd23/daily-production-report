@@ -17,3 +17,9 @@ backend/.env
 # Data exports / backups - real production numbers, and this repo is public
 /backup_*.csv
 /*.xlsx
+/backups/
+/*.json.gz
+data-export*.json
+
+# Production secrets (DB password, SECRET_KEY) generated on the server
+/.env

@@ -24,7 +24,8 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 HISTORY_FIELDS = (
     "shift_count", "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
     "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi",
-    "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "issue_note",
+    "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "wip_reason_quality",
+    "issue_note",
 )
 
 
@@ -269,7 +270,12 @@ def submit_report(
     # and a note explaining it.
     has_wip = (payload.wip_dip or 0) > 0 or (payload.wip_pre_pi or 0) > 0
     if has_wip:
-        any_reason = payload.wip_reason_machine or payload.wip_reason_line_spread or payload.wip_reason_semi_finished
+        any_reason = (
+            payload.wip_reason_machine
+            or payload.wip_reason_line_spread
+            or payload.wip_reason_semi_finished
+            or payload.wip_reason_quality
+        )
         note_empty = not payload.issue_note or not payload.issue_note.strip()
         if not any_reason or note_empty:
             raise HTTPException(
@@ -282,7 +288,7 @@ def submit_report(
     for field in (
         "shift_count", "buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin",
         "wip_dip", "wip_pre_pi", "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished",
-        "issue_note",
+        "wip_reason_quality", "issue_note",
     ):
         setattr(report, field, getattr(payload, field))
 

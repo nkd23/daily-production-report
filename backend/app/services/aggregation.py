@@ -119,6 +119,7 @@ def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]
                 wip_reason_machine=report.wip_reason_machine if report else False,
                 wip_reason_line_spread=report.wip_reason_line_spread if report else False,
                 wip_reason_semi_finished=report.wip_reason_semi_finished if report else False,
+                wip_reason_quality=report.wip_reason_quality if report else False,
                 issue_note=report.issue_note if report else None,
                 is_submitted=report.is_submitted if report else False,
                 is_locked=is_locked,

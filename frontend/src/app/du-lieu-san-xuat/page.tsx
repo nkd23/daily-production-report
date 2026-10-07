@@ -108,7 +108,7 @@ function IssueCell({ line }: { line: LineDaySummary }) {
 }
 
 function wipReasonBadges(line: LineDaySummary) {
-  if (!line.wip_reason_machine && !line.wip_reason_line_spread && !line.wip_reason_semi_finished) {
+  if (!line.wip_reason_machine && !line.wip_reason_line_spread && !line.wip_reason_semi_finished && !line.wip_reason_quality) {
     return <span className="text-muted">-</span>;
   }
   return (
@@ -116,6 +116,7 @@ function wipReasonBadges(line: LineDaySummary) {
       {line.wip_reason_machine ? <Badge tone="warning">Do máy</Badge> : null}
       {line.wip_reason_line_spread ? <Badge tone="primary">Rải chuyền</Badge> : null}
       {line.wip_reason_semi_finished ? <Badge tone="pu2">Bán thành phẩm</Badge> : null}
+      {line.wip_reason_quality ? <Badge tone="danger">Chất lượng</Badge> : null}
     </div>
   );
 }
@@ -202,6 +203,7 @@ const WIP_REASON_OPTIONS = [
   { value: "machine", label: "Do máy" },
   { value: "line_spread", label: "Rải chuyền" },
   { value: "semi_finished", label: "Bán thành phẩm" },
+  { value: "quality", label: "Chất lượng" },
 ] as const;
 
 function DuLieuSanXuatContent() {
@@ -257,6 +259,7 @@ function DuLieuSanXuatContent() {
       if (wipReasonFilter === "machine" && !l.wip_reason_machine) return false;
       if (wipReasonFilter === "line_spread" && !l.wip_reason_line_spread) return false;
       if (wipReasonFilter === "semi_finished" && !l.wip_reason_semi_finished) return false;
+      if (wipReasonFilter === "quality" && !l.wip_reason_quality) return false;
       if (q && !l.line_number.toUpperCase().includes(q) && !(l.buyer ?? "").toUpperCase().includes(q)) return false;
       return true;
     });
@@ -272,7 +275,7 @@ function DuLieuSanXuatContent() {
       description={`${formatVietnameseDate(reportDate)} · Bảng tổng hợp toàn bộ số liệu các chuyền đã nhập`}
       actions={
         <>
-          <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="w-auto" />
+          <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="flex-none basis-44" />
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Làm mới
           </Button>

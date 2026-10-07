@@ -1,38 +1,43 @@
+# Production stack: PostgreSQL + FastAPI backend + Next.js frontend + Caddy (HTTPS).
+# Settings come from a .env file next to this one - see deploy/setup-server.sh,
+# which generates it with random secrets. Only Caddy is reachable from outside.
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_SA_PASSWORD}
-      MSSQL_PID: Express
+      POSTGRES_DB: ${DB_NAME:-duy1}
+      POSTGRES_USER: ${DB_USER:-duy1}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     volumes:
-      - db_data:/var/opt/mssql
+      - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   backend:
     build: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: mssql+pyodbc://sa:${DB_SA_PASSWORD}@db/${DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
-      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-duy1}:${DB_PASSWORD}@db/${DB_NAME:-duy1}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      ENVIRONMENT: production
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
-      REPORT_LOCK_HOUR: ${REPORT_LOCK_HOUR:-21}
+      REPORT_LOCK_HOUR: ${REPORT_LOCK_HOUR:-24}
       CORS_ORIGINS: https://${DOMAIN}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+      DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-60}
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "python init_db.py && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
     build:
       context: ./frontend
       args:
+        # Empty = call the API on the same domain (/api/...), routed by Caddy.
         NEXT_PUBLIC_API_URL: ""
     restart: unless-stopped
     depends_on:
@@ -45,9 +50,9 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${DOMAIN:?DOMAIN must be set in .env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

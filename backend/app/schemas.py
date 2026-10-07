@@ -108,6 +108,7 @@ class DailyReportInput(BaseModel):
     wip_reason_machine: bool = False
     wip_reason_line_spread: bool = False
     wip_reason_semi_finished: bool = False
+    wip_reason_quality: bool = False
     issue_note: str | None = None
 
     @field_validator("buyer")
@@ -136,6 +137,7 @@ class DailyReportOut(BaseModel):
     wip_reason_machine: bool
     wip_reason_line_spread: bool
     wip_reason_semi_finished: bool
+    wip_reason_quality: bool
     issue_note: str | None
     is_submitted: bool
     is_locked: bool
@@ -194,6 +196,7 @@ class LineDaySummary(BaseModel):
     wip_reason_machine: bool
     wip_reason_line_spread: bool
     wip_reason_semi_finished: bool
+    wip_reason_quality: bool
     issue_note: str | None
     is_submitted: bool
     is_locked: bool
@@ -257,3 +260,77 @@ class DashboardResponse(BaseModel):
     executives: list[ExecutiveSummary]
     summary_table: list[GroupSummary]
     issues: list[IssueItem]
+
+
+# ---------- Weekly (Monday -> Sunday) ----------
+class WeeklyDayPoint(BaseModel):
+    report_date: date
+    target_output: int
+    actual_output: int
+    completion_rate: float | None
+    avg_eff_sew: float | None
+    avg_eff_fin: float | None
+    wip_dip: int
+    wip_pre_pi: int
+    lines_submitted: int
+
+
+class WeeklyLineSummary(BaseModel):
+    line_id: int
+    line_number: str
+    executive_name: str
+    pu_group: PuGroup
+    days_submitted: int
+    shift_total: int
+    target_output: int
+    target_eff: float | None
+    out_sew: int
+    eff_sew: float | None
+    out_fin_scanpack: int
+    out_fin_fin: int
+    eff_fin: float | None
+    completion_rate: float | None
+    var: int
+    # Stock on hand as of the line's last submitted day in the week - WIP is a
+    # point-in-time count, so summing it across days would be meaningless.
+    wip_dip: int | None
+    wip_pre_pi: int | None
+    # Number of days in the week each reason was checked.
+    wip_machine_days: int
+    wip_line_spread_days: int
+    wip_semi_finished_days: int
+    wip_quality_days: int
+    issue_days: int
+
+
+class WeeklyKpi(BaseModel):
+    total_target_output: int
+    total_actual_output: int
+    completion_rate: float | None
+    avg_eff_sew: float | None
+    avg_eff_fin: float | None
+    end_wip_dip: int
+    end_wip_pre_pi: int
+    days_with_data: int
+    line_days_submitted: int
+    issue_line_days: int
+
+
+class WeeklyWipReasonTotals(BaseModel):
+    """Line-days per reason: one line checking a reason on one day = 1."""
+
+    machine: int
+    line_spread: int
+    semi_finished: int
+    quality: int
+
+
+class WeeklyResponse(BaseModel):
+    week_start: date
+    week_end: date
+    iso_week: int
+    kpi: WeeklyKpi
+    days: list[WeeklyDayPoint]
+    lines: list[WeeklyLineSummary]
+    summary_table: list[GroupSummary]
+    wip_reasons: WeeklyWipReasonTotals

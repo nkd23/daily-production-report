@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/api/cron/retention",
+      "schedule": "0 19 * * *"
+    }
+  ]
+}

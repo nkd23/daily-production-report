@@ -123,6 +123,7 @@ class DailyReport(Base):
     wip_reason_machine: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     wip_reason_line_spread: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     wip_reason_semi_finished: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    wip_reason_quality: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     issue_note: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
     is_submitted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -139,6 +140,18 @@ class DailyReport(Base):
 
     line: Mapped["Line"] = relationship(back_populates="reports")
     submitted_by_user: Mapped["User | None"] = relationship(foreign_keys=[submitted_by])
+
+
+class LoginFailure(Base):
+    """One failed login attempt, kept only for app.login_throttle's sliding
+    window. Stored in the database (not process memory) so every server
+    worker enforces the same limit."""
+
+    __tablename__ = "login_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    throttle_key: Mapped[str] = mapped_column(Unicode(200), nullable=False, index=True)
+    failed_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False, index=True)
 
 
 class ReportHistory(Base):

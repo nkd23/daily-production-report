@@ -1,0 +1,15 @@
+# Local machine config (SQL Server connection, dev secret) must never ship;
+# production settings come from Vercel environment variables.
+.env
+.env.*
+.venv
+__pycache__
+*.pyc
+Dockerfile
+.dockerignore
+init_schema.py
+seed.py
+tools
+alembic
+alembic.ini
+requirements-mssql.txt

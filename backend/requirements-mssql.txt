@@ -1,0 +1,4 @@
+# Only for local development against SQL Server (the original dev setup).
+# Production (Docker / Vercel) runs on PostgreSQL and doesn't need this.
+#   pip install -r requirements.txt -r requirements-mssql.txt
+pyodbc==5.1.0

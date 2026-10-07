@@ -40,6 +40,7 @@ export interface DailyReport {
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
+  wip_reason_quality: boolean;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -66,6 +67,7 @@ export interface DailyReportInput {
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
+  wip_reason_quality: boolean;
   issue_note: string | null;
 }
 
@@ -93,6 +95,7 @@ export interface LineDaySummary {
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
+  wip_reason_quality: boolean;
   issue_note: string | null;
   is_submitted: boolean;
   is_locked: boolean;
@@ -155,6 +158,67 @@ export interface DashboardResponse {
   issues: IssueItem[];
 }
 
+export interface WeeklyDayPoint {
+  report_date: string;
+  target_output: number;
+  actual_output: number;
+  completion_rate: number | null;
+  avg_eff_sew: number | null;
+  avg_eff_fin: number | null;
+  wip_dip: number;
+  wip_pre_pi: number;
+  lines_submitted: number;
+}
+
+export interface WeeklyLineSummary {
+  line_id: number;
+  line_number: string;
+  executive_name: string;
+  pu_group: PuGroup;
+  days_submitted: number;
+  shift_total: number;
+  target_output: number;
+  target_eff: number | null;
+  out_sew: number;
+  eff_sew: number | null;
+  out_fin_scanpack: number;
+  out_fin_fin: number;
+  eff_fin: number | null;
+  completion_rate: number | null;
+  var: number;
+  wip_dip: number | null;
+  wip_pre_pi: number | null;
+  wip_machine_days: number;
+  wip_line_spread_days: number;
+  wip_semi_finished_days: number;
+  wip_quality_days: number;
+  issue_days: number;
+}
+
+export interface WeeklyKpi {
+  total_target_output: number;
+  total_actual_output: number;
+  completion_rate: number | null;
+  avg_eff_sew: number | null;
+  avg_eff_fin: number | null;
+  end_wip_dip: number;
+  end_wip_pre_pi: number;
+  days_with_data: number;
+  line_days_submitted: number;
+  issue_line_days: number;
+}
+
+export interface WeeklyResponse {
+  week_start: string;
+  week_end: string;
+  iso_week: number;
+  kpi: WeeklyKpi;
+  days: WeeklyDayPoint[];
+  lines: WeeklyLineSummary[];
+  summary_table: GroupSummary[];
+  wip_reasons: { machine: number; line_spread: number; semi_finished: number; quality: number };
+}
+
 export type ReportHistoryAction = "submit" | "target_update" | "delete";
 
 export interface ReportHistoryValues {
@@ -173,6 +237,7 @@ export interface ReportHistoryValues {
   wip_reason_machine: boolean | null;
   wip_reason_line_spread: boolean | null;
   wip_reason_semi_finished: boolean | null;
+  wip_reason_quality: boolean | null;
   issue_note: string | null;
 }
 

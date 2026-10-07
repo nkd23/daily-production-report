@@ -1,0 +1,6 @@
+# Files executed or parsed on the Linux server must keep LF endings even when
+# committed from Windows (core.autocrlf=true would otherwise risk CRLF).
+*.sh text eol=lf
+Caddyfile text eol=lf
+docker-compose.yml text eol=lf
+Dockerfile text eol=lf

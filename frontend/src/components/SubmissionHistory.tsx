@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import type { DailyReport } from "@/lib/types";
 
 function wipReasonBadges(r: DailyReport) {
-  if (!r.wip_reason_machine && !r.wip_reason_line_spread && !r.wip_reason_semi_finished) {
+  if (!r.wip_reason_machine && !r.wip_reason_line_spread && !r.wip_reason_semi_finished && !r.wip_reason_quality) {
     return <span className="text-muted">-</span>;
   }
   return (
@@ -15,6 +15,7 @@ function wipReasonBadges(r: DailyReport) {
       {r.wip_reason_machine ? <Badge tone="warning">Do máy</Badge> : null}
       {r.wip_reason_line_spread ? <Badge tone="primary">Rải chuyền</Badge> : null}
       {r.wip_reason_semi_finished ? <Badge tone="pu2">Bán thành phẩm</Badge> : null}
+      {r.wip_reason_quality ? <Badge tone="danger">Chất lượng</Badge> : null}
     </div>
   );
 }

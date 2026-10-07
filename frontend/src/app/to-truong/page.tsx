@@ -54,7 +54,7 @@ function ToTruongContent() {
             if (v > todayISO()) return;
             setReportDate(v);
           }}
-          className="w-auto"
+          className="flex-none basis-44"
         />
       }
     >

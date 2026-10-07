@@ -22,6 +22,7 @@ const FIELD_LABELS: Record<keyof ReportHistoryValues, string> = {
   wip_reason_machine: "Tồn do máy",
   wip_reason_line_spread: "Tồn do rải chuyền",
   wip_reason_semi_finished: "Tồn do bán thành phẩm",
+  wip_reason_quality: "Tồn do chất lượng",
   issue_note: "Issue / Lí do",
 };
 

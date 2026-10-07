@@ -7,8 +7,7 @@ nhập trực tiếp, thư ký/sếp xem Dashboard và xuất Excel đúng layou
 - **Frontend**: Next.js 16 (App Router) + Tailwind CSS + Recharts
 - **Auth**: JWT, phân quyền theo role (`to_truong` / `thu_ky` / `sep`)
 
-> Đề bài gốc yêu cầu MySQL 8.0, nhưng dự án được đổi sang SQL Server vì máy dev
-> đã có sẵn SQL Server 2022 cài trước đó. Local dev dùng Windows Authentication;
+> Local dev dùng Windows Authentication;
 > production (Docker) dùng SQL Server 2022 Express (miễn phí bản quyền) qua SA
 > login. Toàn bộ code dùng SQLAlchemy nên nếu sau này cần đổi lại MySQL/Postgres,
 > chỉ cần đổi `DATABASE_URL` + driver, model layer không phải viết lại.
@@ -39,7 +38,7 @@ CREATE DATABASE duy1_production;
 cd backend
 python -m venv .venv
 .venv/Scripts/activate   # Windows; source .venv/bin/activate trên Linux/Mac
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-mssql.txt
 cp .env.example .env     # sửa DATABASE_URL nếu cần
 alembic upgrade head
 python seed.py           # tạo tài khoản + line mẫu để test
@@ -61,7 +60,7 @@ Tài khoản sau khi seed (45 line thật, gán theo Executive):
 | to_hue | Totruong@2026 | Tổ trưởng — Ms Huệ (1 line) |
 
 **Đổi mật khẩu các tài khoản này trước khi dùng thật** (dùng màn hình "Cấu hình
-Line" → mục "Quản lý tài khoản", hoặc nhờ Claude đổi giúp).
+Line" → mục "Quản lý tài khoản").
 
 PU (PU1/PU2), SAM, Target Output, Target EFF của 45 line trên đang là giá trị
 mặc định (0 / PU1) vì chưa có số liệu thật — Thư ký/Sếp cần vào "Cấu hình Line"
@@ -78,34 +77,6 @@ npm run dev
 
 Mở `http://localhost:3000`.
 
-## Triển khai lên Hostinger VPS (Docker)
-
-Yêu cầu: Hostinger **VPS** (không phải shared hosting — shared hosting không chạy
-được Python/Node liên tục), đã cài Docker + Docker Compose, và một domain đã trỏ
-bản ghi A về IP của VPS.
-
-```bash
-# 1. SSH vào VPS, clone repo
-git clone <repo-url> duy1 && cd duy1
-
-# 2. Tạo file .env từ mẫu, điền domain + mật khẩu thật
-cp .env.example .env
-nano .env
-
-# 3. Build & chạy toàn bộ (SQL Server + backend + frontend + Caddy/HTTPS)
-docker compose up -d --build
-
-# 4. Tạo tài khoản/line mẫu ban đầu (chỉ chạy 1 lần)
-docker compose exec backend python seed.py
-```
-
-Caddy tự động lấy chứng chỉ HTTPS Let's Encrypt cho domain trong `.env` (`DOMAIN=...`)
-— chỉ cần cổng 80/443 của VPS mở và domain đã trỏ đúng IP. Sau vài giây, truy cập
-`https://<domain-của-bạn>` là dùng được.
-
-Container `db` chạy **SQL Server 2022 Express** (`MSSQL_PID=Express`, miễn phí,
-đủ cho quy mô 1 nhà máy) và khởi tạo database qua `backend/init_db.py` trước khi
-chạy migration — không cần bước tạo database thủ công.
 
 ### Cập nhật khi có code mới
 
@@ -124,8 +95,9 @@ docker compose cp db:/var/opt/mssql/backup_$(date +%F).bak ./backup_$(date +%F).
 
 ## Cấu hình đáng chú ý
 
-- **Giờ khoá báo cáo**: biến `REPORT_LOCK_HOUR` (mặc định 21 = 21h). Sau giờ này,
-  tổ trưởng không sửa được dữ liệu ngày hiện tại — chỉ Thư ký/Sếp mở khoá được.
+- **Giờ khoá báo cáo**: biến `REPORT_LOCK_HOUR` (mặc định 24 = sửa được đến hết
+  ngày, qua 0h thì khoá). Đặt số nhỏ hơn (ví dụ 21) để khoá sớm hơn trong ngày.
+  Ngày đã khoá thì tổ trưởng không sửa được — chỉ Thư ký/Sếp mở khoá được.
 - **Ngưỡng tô màu cảnh báo hiệu suất trong Excel**: `EFF_WARNING_THRESHOLD` (0.75)
   và `EFF_CRITICAL_THRESHOLD` (0.60) trong [backend/app/services/excel_export.py](backend/app/services/excel_export.py).
   Đây là số **chưa được xác nhận chính thức** — cần hỏi lại IE/PPC rồi chỉnh 2

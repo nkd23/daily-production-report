@@ -44,7 +44,7 @@ function ThuKyContent() {
       description="Xem line nào đã nộp / chưa nộp trong ngày, mở khoá hoặc nhập hộ khi cần"
       actions={
         <>
-          <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="w-auto" />
+          <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="flex-none basis-44" />
           <Button variant="secondary" size="sm" onClick={load}>
             <RefreshCw size={14} /> Làm mới
           </Button>

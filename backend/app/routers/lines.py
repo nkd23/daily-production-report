@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import get_current_user, require_thu_ky_or_sep
@@ -22,7 +22,7 @@ def list_lines(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Line)
+    stmt = select(Line).options(selectinload(Line.to_truong))
     if not include_inactive:
         stmt = stmt.where(Line.is_active == True)  # noqa: E712
 

@@ -1,7 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
-pyodbc==5.1.0
 cryptography==43.0.1
 alembic==1.13.2
 python-jose[cryptography]==3.3.0
@@ -14,4 +13,5 @@ openpyxl==3.1.5
 python-dotenv==1.0.1
 tzdata==2024.1
 apscheduler==3.10.4
+psycopg[binary]==3.2.3
 

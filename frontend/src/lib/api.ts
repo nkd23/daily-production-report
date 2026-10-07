@@ -7,6 +7,7 @@ import type {
   ReportHistoryEntry,
   User,
   UserRole,
+  WeeklyResponse,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -128,6 +129,8 @@ export const api = {
 
   dashboardSummary: (reportDate: string) =>
     request<DashboardResponse>(`/api/dashboard/summary?report_date=${reportDate}`),
+
+  dashboardWeekly: (weekOf: string) => request<WeeklyResponse>(`/api/dashboard/weekly?week_of=${weekOf}`),
 
   async downloadExcel(reportDate: string) {
     const token = getToken();

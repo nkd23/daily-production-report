@@ -71,6 +71,7 @@ const emptyForm: DailyReportInput = {
   wip_reason_machine: false,
   wip_reason_line_spread: false,
   wip_reason_semi_finished: false,
+  wip_reason_quality: false,
   issue_note: "",
 };
 
@@ -160,6 +161,7 @@ export function LineEntryCard({
             wip_reason_machine: report.wip_reason_machine,
             wip_reason_line_spread: report.wip_reason_line_spread,
             wip_reason_semi_finished: report.wip_reason_semi_finished,
+            wip_reason_quality: report.wip_reason_quality,
             issue_note: report.issue_note ?? "",
           }
         : { ...emptyForm }
@@ -201,13 +203,19 @@ export function LineEntryCard({
     }
     const hasWip = (form.wip_dip ?? 0) > 0 || (form.wip_pre_pi ?? 0) > 0;
     if (hasWip) {
-      const anyReasonChecked = form.wip_reason_machine || form.wip_reason_line_spread || form.wip_reason_semi_finished;
+      const anyReasonChecked =
+        form.wip_reason_machine ||
+        form.wip_reason_line_spread ||
+        form.wip_reason_semi_finished ||
+        form.wip_reason_quality;
       const noteEmpty = !form.issue_note || form.issue_note.trim() === "";
       if (!anyReasonChecked || noteEmpty) {
         setError("Vui lòng nhập lý do tồn.");
         setErrorFields(
           new Set([
-            ...(!anyReasonChecked ? (["wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished"] as const) : []),
+            ...(!anyReasonChecked
+              ? (["wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "wip_reason_quality"] as const)
+              : []),
             ...(noteEmpty ? (["issue_note"] as const) : []),
           ])
         );
@@ -463,6 +471,7 @@ export function LineEntryCard({
                 { key: "wip_reason_machine", label: "Do máy" },
                 { key: "wip_reason_line_spread", label: "Rải chuyền" },
                 { key: "wip_reason_semi_finished", label: "Bán thành phẩm" },
+                { key: "wip_reason_quality", label: "Chất lượng" },
               ] as const
             ).map(({ key, label }) => (
               <label key={key} className="flex items-center gap-1.5 text-sm text-foreground">
