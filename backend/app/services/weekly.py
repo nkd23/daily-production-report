@@ -15,8 +15,10 @@ count submitted line-days; the KPI cards add up the daily KPI cards.
 
 from datetime import date, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import DailyReport
 from app.schemas import (
     GroupSummary,
     LineDaySummary,
@@ -26,7 +28,7 @@ from app.schemas import (
     WeeklyResponse,
     WeeklyWipReasonTotals,
 )
-from app.services.aggregation import _avg, _shift_weighted_avg, build_kpi_summary, build_line_summaries
+from app.services.aggregation import _avg, _shift_weighted_avg, active_lines, build_kpi_summary, summarize_lines
 
 
 def week_bounds(any_day: date) -> tuple[date, date]:
@@ -150,9 +152,18 @@ def build_weekly(db: Session, any_day: date, executive_scope: str | None = None)
     week_start, week_end = week_bounds(any_day)
     days = [week_start + timedelta(days=i) for i in range(7)]
 
+    # Two queries for the whole week (lines + that week's reports) rather
+    # than two per day.
+    lines = active_lines(db)
+    reports_by_day: dict[date, dict[int, DailyReport]] = {day: {} for day in days}
+    for r in db.scalars(
+        select(DailyReport).where(DailyReport.report_date >= week_start, DailyReport.report_date <= week_end)
+    ):
+        reports_by_day[r.report_date][r.line_id] = r
+
     lines_per_day: list[list[LineDaySummary]] = []
     for day in days:
-        day_lines = build_line_summaries(db, day)
+        day_lines = summarize_lines(lines, reports_by_day[day], day)
         if executive_scope is not None:
             day_lines = [l for l in day_lines if l.executive_name == executive_scope]
         lines_per_day.append(day_lines)

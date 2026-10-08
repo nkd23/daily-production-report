@@ -1,8 +1,6 @@
 import secrets
 from contextlib import asynccontextmanager
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -37,6 +35,10 @@ async def lifespan(app: FastAPI):
     if settings.is_serverless:
         yield
         return
+    # Imported only here so serverless cold starts don't pay for it (~0.3s).
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
     scheduler = BackgroundScheduler(timezone=settings.app_timezone)
     # Runs once at startup (catches up if the server was down past midnight)
     # and then daily at 02:00 local time, when no one is using the app.

@@ -50,13 +50,24 @@ def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float
     return round(total_weighted / total_weight, 2)
 
 
-def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]:
-    lines = db.scalars(
-        select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
-    ).all()
-    reports = db.scalars(select(DailyReport).where(DailyReport.report_date == report_date)).all()
-    reports_by_line: dict[int, DailyReport] = {r.line_id: r for r in reports}
+def active_lines(db: Session) -> list[Line]:
+    return list(
+        db.scalars(
+            select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
+        ).all()
+    )
 
+
+def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]:
+    reports = db.scalars(select(DailyReport).where(DailyReport.report_date == report_date)).all()
+    return summarize_lines(active_lines(db), {r.line_id: r for r in reports}, report_date)
+
+
+def summarize_lines(
+    lines: list[Line], reports_by_line: dict[int, DailyReport], report_date: date
+) -> list[LineDaySummary]:
+    """The per-line day summary, from already-loaded rows - lets the weekly
+    report load a whole week in one query instead of one per day."""
     summaries: list[LineDaySummary] = []
     for line in lines:
         report = reports_by_line.get(line.id)
