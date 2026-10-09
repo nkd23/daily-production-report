@@ -48,7 +48,9 @@ export function Navbar() {
                   }`}
                 >
                   <Icon size={16} />
-                  {item.label}
+                  {/* Full names don't fit beside the account controls below xl. */}
+                  <span className="xl:hidden">{item.shortLabel}</span>
+                  <span className="hidden xl:inline">{item.label}</span>
                 </Link>
               );
             })}
@@ -65,7 +67,8 @@ export function Navbar() {
               title="Đổi mật khẩu"
             >
               <KeyRound size={16} />
-              <span className="hidden sm:inline">Đổi mật khẩu</span>
+              {/* Icon-only once the page menu shares this bar (lg+); the title shows on hover. */}
+              <span className="hidden sm:inline lg:hidden">Đổi mật khẩu</span>
             </button>
             <button
               onClick={logout}
@@ -73,7 +76,7 @@ export function Navbar() {
               title="Đăng xuất"
             >
               <LogOut size={16} />
-              <span className="hidden sm:inline">Đăng xuất</span>
+              <span className="hidden sm:inline lg:hidden">Đăng xuất</span>
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,13 +14,40 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, Gauge, XCircle } from "lucide-react";
-import { Badge, Card, StatCard } from "@/components/ui";
-import { effClass } from "@/lib/eff-thresholds";
+import { CheckCircle2, Gauge, SlidersHorizontal, XCircle } from "lucide-react";
+import { Badge, Card, Input, StatCard } from "@/components/ui";
 import { execColor } from "@/lib/exec-colors";
 import type { DashboardResponse, ExecutiveSummary, LineDaySummary } from "@/lib/types";
 
 export type EffMetric = "sew" | "fin";
+
+const MAX_TOLERANCE = 50;
+
+// How many EFF points below its own target a line may fall and still count
+// as Đạt (0 = must reach the target). A personal viewing preference, so it
+// lives in this browser only and doesn't affect anyone else's dashboard.
+function useEffTolerance(metric: EffMetric): [number, (v: number) => void] {
+  const key = `duy1.effTolerance.${metric}`;
+  const [tolerance, setTolerance] = useState(0);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(key));
+      if (Number.isFinite(saved) && saved > 0) setTolerance(Math.min(saved, MAX_TOLERANCE));
+    } catch {
+      // storage unavailable (private mode etc.) - keep the default
+    }
+  }, [key]);
+  function update(v: number) {
+    const next = Number.isFinite(v) ? Math.min(Math.max(v, 0), MAX_TOLERANCE) : 0;
+    setTolerance(next);
+    try {
+      localStorage.setItem(key, String(next));
+    } catch {
+      // ignore
+    }
+  }
+  return [tolerance, update];
+}
 
 function pct(n: number | null | undefined) {
   return n === null || n === undefined ? "-" : `${n}%`;
@@ -125,13 +153,16 @@ function ExecStatusTooltip({
 export function EffPanel({ metric, data }: { metric: EffMetric; data: DashboardResponse }) {
   const metricLabel = metric === "sew" ? "EFF-SEW" : "EFF-FIN";
   const avgEff = metric === "sew" ? data.kpi.avg_eff_sew : data.kpi.avg_eff_fin;
+  const [tolerance, setTolerance] = useEffTolerance(metric);
 
   // Lines with both a real EFF value and a real target this day can be
   // judged Đạt/Không đạt; anything else (not submitted, or never given a
   // target) can't be judged either way.
   const classifiable = data.lines.filter((l) => lineEff(l, metric) !== null && l.target_eff > 0);
-  const onTarget = classifiable.filter((l) => lineEff(l, metric)! >= l.target_eff);
-  const notOnTarget = classifiable.filter((l) => lineEff(l, metric)! < l.target_eff);
+  // Small epsilon so e.g. 75 vs 80 - 5 isn't failed by float rounding.
+  const passes = (l: LineDaySummary) => lineEff(l, metric)! + 1e-9 >= l.target_eff - tolerance;
+  const onTarget = classifiable.filter(passes);
+  const notOnTarget = classifiable.filter((l) => !passes(l));
 
   const execChartData: ExecChartRow[] = data.executives
     .map((e) => {
@@ -173,6 +204,37 @@ export function EffPanel({ metric, data }: { metric: EffMetric; data: DashboardR
 
   return (
     <div className="flex flex-col gap-6">
+      <Card className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+        <label htmlFor={`eff-tolerance-${metric}`} className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <SlidersHorizontal size={16} className="text-primary" />
+          Cho phép thấp hơn target tối đa
+        </label>
+        <div className="flex items-center gap-2">
+          <Input
+            id={`eff-tolerance-${metric}`}
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={MAX_TOLERANCE}
+            step={0.5}
+            value={tolerance}
+            onChange={(e) => setTolerance(e.target.value === "" ? 0 : Number(e.target.value))}
+            className="flex-none basis-24 text-right"
+          />
+          <span className="text-sm text-muted">%</span>
+          {tolerance > 0 ? (
+            <button type="button" onClick={() => setTolerance(0)} className="text-xs text-primary hover:underline">
+              Đặt lại 0
+            </button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted">
+          {tolerance > 0
+            ? `Line có ${metricLabel} thấp hơn target quá ${tolerance}% mới tính là Không đạt.`
+            : `Đang xét chặt: ${metricLabel} phải bằng hoặc cao hơn target mới tính là Đạt.`}
+        </p>
+      </Card>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label={`${metricLabel} trung bình`} value={pct(avgEff)} tone="primary" icon={Gauge} />
         <StatCard
@@ -313,14 +375,19 @@ export function EffPanel({ metric, data }: { metric: EffMetric; data: DashboardR
               {sortedLines.map((line) => {
                 const actual = lineEff(line, metric);
                 const diff = actual !== null && line.target_eff ? Math.round((actual - line.target_eff) * 10) / 10 : null;
+                const judged = actual !== null && line.target_eff > 0;
+                const failed = judged && !passes(line);
+                // Below target but within the allowed tolerance: amber, so it
+                // still stands out without being counted as Không đạt.
+                const diffClass = failed ? "text-danger font-semibold" : diff !== null && diff < 0 ? "text-warning font-semibold" : "";
                 return (
                   <tr key={line.line_id} className="border-b border-border last:border-0">
                     <td className="whitespace-nowrap px-4 py-2 font-medium">{line.line_number}</td>
                     <td className="px-4 py-2 text-muted">{line.executive_name}</td>
                     <td className="px-4 py-2 text-muted">{line.buyer ?? "-"}</td>
                     <td className="px-4 py-2 text-right">{line.target_eff > 0 ? pct(line.target_eff) : "-"}</td>
-                    <td className={`px-4 py-2 text-right ${effClass(actual, line.target_eff)}`}>{pct(actual)}</td>
-                    <td className={`px-4 py-2 text-right ${diff !== null && diff < 0 ? "text-danger font-semibold" : ""}`}>
+                    <td className={`px-4 py-2 text-right ${failed ? "bg-danger-soft text-danger font-semibold" : ""}`}>{pct(actual)}</td>
+                    <td className={`px-4 py-2 text-right ${diffClass}`}>
                       {diff !== null ? `${diff > 0 ? "+" : ""}${diff}%` : "-"}
                     </td>
                     <td className="px-4 py-2">
