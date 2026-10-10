@@ -208,15 +208,19 @@ export function LineEntryCard({
         form.wip_reason_line_spread ||
         form.wip_reason_semi_finished ||
         form.wip_reason_quality;
-      const noteEmpty = !form.issue_note || form.issue_note.trim() === "";
-      if (!anyReasonChecked || noteEmpty) {
+      const note = (form.issue_note ?? "").trim();
+      // "0" with no box ticked = "no reason for this WIP" (most lines carry
+      // normal WIP). Otherwise a ticked reason plus a written note is needed.
+      const noReasonDeclared = note === "0";
+      const valid = noReasonDeclared ? !anyReasonChecked : anyReasonChecked && note !== "";
+      if (!valid) {
         setError("Vui lòng nhập lý do tồn.");
         setErrorFields(
           new Set([
-            ...(!anyReasonChecked
+            ...(!anyReasonChecked || noReasonDeclared
               ? (["wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "wip_reason_quality"] as const)
               : []),
-            ...(noteEmpty ? (["issue_note"] as const) : []),
+            ...(note === "" || noReasonDeclared ? (["issue_note"] as const) : []),
           ])
         );
         return;
@@ -489,6 +493,9 @@ export function LineEntryCard({
               </label>
             ))}
           </div>
+          <p className="mt-1.5 text-xs text-muted">
+            Không có lý do tồn: không tích ô nào, nhập <span className="font-semibold text-foreground">0</span> vào ô Issue / Lí do.
+          </p>
         </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-4">
@@ -501,7 +508,7 @@ export function LineEntryCard({
               setForm({ ...form, issue_note: e.target.value });
               setErrorFields(new Set());
             }}
-            placeholder="VD: thiếu nguyên liệu, máy hỏng, thiếu chuyền..."
+            placeholder="VD: thiếu nguyên liệu, máy hỏng, thiếu chuyền... (không có thì nhập 0)"
             className={errorFields.has("issue_note") ? "border-danger ring-2 ring-danger/20" : ""}
           />
         </div>

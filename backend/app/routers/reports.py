@@ -266,8 +266,14 @@ def submit_report(
             detail="Vui lòng kiểm tra lại số liệu.",
         )
 
-    # A day with real WIP (tồn) must say why - at least one reason checked
-    # and a note explaining it.
+    # A day with WIP (tồn) must either give a reason - at least one box
+    # checked plus a note - or say explicitly that there is none by entering
+    # "0" as the note (most lines carry normal WIP with nothing to explain).
+    # "0" is stored as no note, so it never counts as an issue on dashboards.
+    note = (payload.issue_note or "").strip()
+    no_reason_declared = note == "0"
+    if no_reason_declared:
+        payload.issue_note = None
     has_wip = (payload.wip_dip or 0) > 0 or (payload.wip_pre_pi or 0) > 0
     if has_wip:
         any_reason = (
@@ -276,8 +282,8 @@ def submit_report(
             or payload.wip_reason_semi_finished
             or payload.wip_reason_quality
         )
-        note_empty = not payload.issue_note or not payload.issue_note.strip()
-        if not any_reason or note_empty:
+        valid = (not any_reason) if no_reason_declared else (any_reason and bool(note))
+        if not valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Vui lòng nhập lý do tồn.",
