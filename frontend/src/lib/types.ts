@@ -30,13 +30,16 @@ export interface DailyReport {
   report_date: string;
   shift_count: number;
   buyer: string | null;
+  sam: number | null;
   out_sew: number | null;
   eff_sew: number | null;
   out_fin_scanpack: number | null;
   out_fin_fin: number | null;
   eff_fin: number | null;
   wip_dip: number | null;
+  wip_wash: number | null;
   wip_pre_pi: number | null;
+  wip_post_pi: number | null;
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
@@ -48,22 +51,44 @@ export interface DailyReport {
   var: number | null;
 }
 
+export interface EntryDefaults {
+  buyer: string | null;
+  shift_count: number;
+  sam: number | null;
+}
+
 export interface LineWithReport {
   line: Line;
   report: DailyReport | null;
   is_editable: boolean;
+  defaults: EntryDefaults | null;
+}
+
+export interface LineTargetRow {
+  line_id: number;
+  line_number: string;
+  executive_name: string;
+  pu_group: PuGroup;
+  target_output: number | null;
+  target_eff: number | null;
+  effective_from: string | null;
+  set_by_name: string | null;
+  set_at: string | null;
 }
 
 export interface DailyReportInput {
   shift_count: number;
   buyer: string;
+  sam: number | null;
   out_sew: number | null;
   eff_sew: number | null;
   out_fin_scanpack: number | null;
   out_fin_fin: number | null;
   eff_fin: number | null;
   wip_dip: number | null;
+  wip_wash: number | null;
   wip_pre_pi: number | null;
+  wip_post_pi: number | null;
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
@@ -91,7 +116,9 @@ export interface LineDaySummary {
   eff_fin: number | null;
   var: number | null;
   wip_dip: number | null;
+  wip_wash: number | null;
   wip_pre_pi: number | null;
+  wip_post_pi: number | null;
   wip_reason_machine: boolean;
   wip_reason_line_spread: boolean;
   wip_reason_semi_finished: boolean;
@@ -126,7 +153,9 @@ export interface GroupSummary {
   eff_fin_avg: number | null;
   var: number;
   wip_dip: number;
+  wip_wash: number;
   wip_pre_pi: number;
+  wip_post_pi: number;
 }
 
 export interface KpiSummary {
@@ -136,7 +165,9 @@ export interface KpiSummary {
   avg_eff_sew: number | null;
   avg_eff_fin: number | null;
   total_wip_dip: number;
+  total_wip_wash: number;
   total_wip_pre_pi: number;
+  total_wip_post_pi: number;
   lines_with_issue: number;
   lines_submitted: number;
   lines_total: number;
@@ -166,7 +197,9 @@ export interface WeeklyDayPoint {
   avg_eff_sew: number | null;
   avg_eff_fin: number | null;
   wip_dip: number;
+  wip_wash: number;
   wip_pre_pi: number;
+  wip_post_pi: number;
   lines_submitted: number;
 }
 
@@ -187,7 +220,9 @@ export interface WeeklyLineSummary {
   completion_rate: number | null;
   var: number;
   wip_dip: number | null;
+  wip_wash: number | null;
   wip_pre_pi: number | null;
+  wip_post_pi: number | null;
   wip_machine_days: number;
   wip_line_spread_days: number;
   wip_semi_finished_days: number;
@@ -202,7 +237,9 @@ export interface WeeklyKpi {
   avg_eff_sew: number | null;
   avg_eff_fin: number | null;
   end_wip_dip: number;
+  end_wip_wash: number;
   end_wip_pre_pi: number;
+  end_wip_post_pi: number;
   days_with_data: number;
   line_days_submitted: number;
   issue_line_days: number;
@@ -233,7 +270,9 @@ export interface ReportHistoryValues {
   out_fin_fin: number | null;
   eff_fin: number | null;
   wip_dip: number | null;
+  wip_wash: number | null;
   wip_pre_pi: number | null;
+  wip_post_pi: number | null;
   wip_reason_machine: boolean | null;
   wip_reason_line_spread: boolean | null;
   wip_reason_semi_finished: boolean | null;

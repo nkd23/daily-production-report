@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound, Table2, CalendarRange } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound, Table2, CalendarRange, Crosshair } from "lucide-react";
 import { useAuth, roleLabel } from "@/lib/auth-context";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import type { UserRole } from "@/lib/types";
 
 const NAV_ITEMS: { href: string; label: string; shortLabel: string; icon: typeof LayoutDashboard; roles: UserRole[] }[] = [
   { href: "/to-truong", label: "Nhập sản lượng", shortLabel: "Nhập", icon: ClipboardList, roles: ["to_truong"] },
-  { href: "/thu-ky", label: "Theo dõi nộp báo cáo", shortLabel: "Theo dõi", icon: ClipboardList, roles: ["thu_ky", "sep"] },
+  { href: "/thu-ky", label: "Theo dõi", shortLabel: "Theo dõi", icon: ClipboardList, roles: ["thu_ky", "sep"] },
   { href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep", "executive"] },
   { href: "/bao-cao-tuan", label: "Báo cáo tuần", shortLabel: "Tuần", icon: CalendarRange, roles: ["thu_ky", "sep", "executive"] },
+  { href: "/target", label: "Target", shortLabel: "Target", icon: Crosshair, roles: ["thu_ky", "sep", "executive"] },
   { href: "/du-lieu-san-xuat", label: "Dữ liệu sản xuất", shortLabel: "Dữ liệu", icon: Table2, roles: ["thu_ky", "sep", "executive"] },
   { href: "/thu-ky/config", label: "Cấu hình Line", shortLabel: "Cấu hình", icon: Settings2, roles: ["thu_ky", "sep"] },
 ];
@@ -48,7 +49,7 @@ export function Navbar() {
                   }`}
                 >
                   <Icon size={16} />
-                  {/* Full names don't fit beside the account controls below xl. */}
+                  {/* The bar is capped at max-w-7xl, so full names only fit from xl. */}
                   <span className="xl:hidden">{item.shortLabel}</span>
                   <span className="hidden xl:inline">{item.label}</span>
                 </Link>
@@ -57,7 +58,7 @@ export function Navbar() {
           </nav>
 
           <div className="ml-auto flex items-center gap-1 sm:gap-3">
-            <div className="hidden text-right sm:block">
+            <div className="hidden text-right sm:block lg:hidden">
               <p className="text-sm font-medium leading-none">{user.full_name}</p>
               <p className="mt-1 text-xs text-muted">{roleLabel[user.role]}</p>
             </div>

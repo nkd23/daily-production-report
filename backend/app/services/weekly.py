@@ -63,7 +63,9 @@ def _weekly_line(line_days: list[LineDaySummary]) -> WeeklyLineSummary:
         completion_rate=_completion(out_fin_fin, target_output),
         var=sum((d.var or 0) for d in submitted),
         wip_dip=last.wip_dip if last else None,
+        wip_wash=last.wip_wash if last else None,
         wip_pre_pi=last.wip_pre_pi if last else None,
+        wip_post_pi=last.wip_post_pi if last else None,
         wip_machine_days=sum(1 for d in submitted if d.wip_reason_machine),
         wip_line_spread_days=sum(1 for d in submitted if d.wip_reason_line_spread),
         wip_semi_finished_days=sum(1 for d in submitted if d.wip_reason_semi_finished),
@@ -95,7 +97,9 @@ def _weekly_group(
         eff_fin_avg=_shift_weighted_avg([(d.eff_fin_weight, d.eff_fin) for d in items]),
         var=sum((d.var or 0) for d in items),
         wip_dip=sum((w.wip_dip or 0) for w in week_lines),
+        wip_wash=sum((w.wip_wash or 0) for w in week_lines),
         wip_pre_pi=sum((w.wip_pre_pi or 0) for w in week_lines),
+        wip_post_pi=sum((w.wip_post_pi or 0) for w in week_lines),
     )
 
 
@@ -185,7 +189,9 @@ def build_weekly(db: Session, any_day: date, executive_scope: str | None = None)
             avg_eff_sew=k.avg_eff_sew,
             avg_eff_fin=k.avg_eff_fin,
             wip_dip=k.total_wip_dip,
+            wip_wash=k.total_wip_wash,
             wip_pre_pi=k.total_wip_pre_pi,
+            wip_post_pi=k.total_wip_post_pi,
             lines_submitted=k.lines_submitted,
         )
         for day, k in zip(days, daily_kpis)
@@ -201,7 +207,9 @@ def build_weekly(db: Session, any_day: date, executive_scope: str | None = None)
         avg_eff_sew=_shift_weighted_avg([(l.eff_sew_weight, l.eff_sew) for l in all_line_days]),
         avg_eff_fin=_shift_weighted_avg([(l.eff_fin_weight, l.eff_fin) for l in all_line_days]),
         end_wip_dip=sum((w.wip_dip or 0) for w in week_lines),
+        end_wip_wash=sum((w.wip_wash or 0) for w in week_lines),
         end_wip_pre_pi=sum((w.wip_pre_pi or 0) for w in week_lines),
+        end_wip_post_pi=sum((w.wip_post_pi or 0) for w in week_lines),
         days_with_data=sum(1 for k in daily_kpis if k.lines_submitted > 0),
         line_days_submitted=sum(k.lines_submitted for k in daily_kpis),
         issue_line_days=sum(w.issue_days for w in week_lines),

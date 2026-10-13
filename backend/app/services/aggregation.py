@@ -5,11 +5,10 @@ There is exactly one daily_reports row per line per date. The Tổ trưởng
 enters shift_count (the factory's "tổng số Ca") directly on that row rather
 than submitting once per shift, so no summing/averaging across rows is
 needed here - every OUT-*/EFF-*/WIP value is read straight off the row.
-SAM/target_output/target_eff come ONLY from report_date's own row. A day
-nobody has touched must show as having no data of its own (0 / blank), even
-if a later or earlier day does, or if the Line has a bootstrap default
-configured via "Cấu hình Line" - Tổ trưởng must always enter these by hand
-for a new day, see routers/reports.py's get_my_lines/get_line_report.
+SAM/target_output/target_eff come ONLY from report_date's own row (the
+target there is a copy of the line's standing target, see
+app.services.targets). A line with no report on a day contributes no target
+that day, so unsubmitted lines don't drag down % hoàn thành.
 """
 
 from datetime import date
@@ -126,7 +125,9 @@ def summarize_lines(
                 eff_fin=eff_fin,
                 var=var,
                 wip_dip=report.wip_dip if report else None,
+                wip_wash=report.wip_wash if report else None,
                 wip_pre_pi=report.wip_pre_pi if report else None,
+                wip_post_pi=report.wip_post_pi if report else None,
                 wip_reason_machine=report.wip_reason_machine if report else False,
                 wip_reason_line_spread=report.wip_reason_line_spread if report else False,
                 wip_reason_semi_finished=report.wip_reason_semi_finished if report else False,
@@ -183,7 +184,9 @@ def _build_group_summary(
         eff_fin_avg=_shift_weighted_avg([(i.eff_fin_weight, i.eff_fin) for i in items]),
         var=sum((i.var or 0) for i in items),
         wip_dip=sum((i.wip_dip or 0) for i in items),
+        wip_wash=sum((i.wip_wash or 0) for i in items),
         wip_pre_pi=sum((i.wip_pre_pi or 0) for i in items),
+        wip_post_pi=sum((i.wip_post_pi or 0) for i in items),
     )
 
 
@@ -242,7 +245,9 @@ def build_kpi_summary(lines: list[LineDaySummary]) -> KpiSummary:
         avg_eff_sew=_shift_weighted_avg([(l.eff_sew_weight, l.eff_sew) for l in lines]),
         avg_eff_fin=_shift_weighted_avg([(l.eff_fin_weight, l.eff_fin) for l in lines]),
         total_wip_dip=sum((l.wip_dip or 0) for l in lines),
+        total_wip_wash=sum((l.wip_wash or 0) for l in lines),
         total_wip_pre_pi=sum((l.wip_pre_pi or 0) for l in lines),
+        total_wip_post_pi=sum((l.wip_post_pi or 0) for l in lines),
         lines_with_issue=sum(1 for l in lines if l.issue_note),
         lines_submitted=sum(1 for l in lines if l.is_submitted),
         lines_total=len(lines),

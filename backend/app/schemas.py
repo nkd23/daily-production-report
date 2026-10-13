@@ -83,28 +83,43 @@ class LineOut(LineBase):
     to_truong_name: str | None = None
 
 
-class LineTargetUpdate(BaseModel):
-    """SAM / NEW OUT-TAR / NEW EFF-TAR for one day's report - these can change
-    day to day (SAM tracks whatever buyer/style is currently running), entered
-    by whoever knows the current numbers (Thư ký, Sếp, or the Tổ trưởng of
-    that line)."""
+class LineTargetSet(BaseModel):
+    """A line's target from effective_from onward - set by its Executive or
+    Thư ký/Manager (see app.services.targets)."""
 
-    sam: float = Field(gt=0)
     target_output: int = Field(gt=0)
-    target_eff: float = Field(gt=0)
+    target_eff: float = Field(gt=0, le=200)
+    effective_from: date
+
+
+class LineTargetRow(BaseModel):
+    line_id: int
+    line_number: str
+    executive_name: str
+    pu_group: PuGroup
+    target_output: int | None
+    target_eff: float | None
+    # None = no target saved on the Target page yet; the values above then
+    # come from the line's latest report.
+    effective_from: date | None
+    set_by_name: str | None
+    set_at: datetime | None
 
 
 # ---------- Daily reports ----------
 class DailyReportInput(BaseModel):
     shift_count: int = Field(ge=1, le=2)
     buyer: str = Field(min_length=1)
+    sam: float = Field(gt=0)
     out_sew: int | None = Field(default=None, ge=0)
     eff_sew: float | None = Field(default=None, ge=0)
     out_fin_scanpack: int | None = Field(default=None, ge=0)
     out_fin_fin: int | None = Field(default=None, ge=0)
     eff_fin: float | None = Field(default=None, ge=0)
     wip_dip: int | None = Field(default=None, ge=0)
+    wip_wash: int | None = Field(default=None, ge=0)
     wip_pre_pi: int | None = Field(default=None, ge=0)
+    wip_post_pi: int | None = Field(default=None, ge=0)
     wip_reason_machine: bool = False
     wip_reason_line_spread: bool = False
     wip_reason_semi_finished: bool = False
@@ -127,13 +142,16 @@ class DailyReportOut(BaseModel):
     report_date: date
     shift_count: int
     buyer: str | None
+    sam: float | None
     out_sew: int | None
     eff_sew: float | None
     out_fin_scanpack: int | None
     out_fin_fin: int | None
     eff_fin: float | None
     wip_dip: int | None
+    wip_wash: int | None
     wip_pre_pi: int | None
+    wip_post_pi: int | None
     wip_reason_machine: bool
     wip_reason_line_spread: bool
     wip_reason_semi_finished: bool
@@ -145,10 +163,19 @@ class DailyReportOut(BaseModel):
     var: int | None = None
 
 
+class EntryDefaults(BaseModel):
+    """Pre-fill for a day with no report yet, from the line's latest submission."""
+
+    buyer: str | None
+    shift_count: int
+    sam: float | None
+
+
 class LineWithReportOut(BaseModel):
     line: LineOut
     report: DailyReportOut | None
     is_editable: bool
+    defaults: EntryDefaults | None = None
 
 
 class UnlockRequest(BaseModel):
@@ -192,7 +219,9 @@ class LineDaySummary(BaseModel):
     eff_fin: float | None
     var: int | None
     wip_dip: int | None
+    wip_wash: int | None
     wip_pre_pi: int | None
+    wip_post_pi: int | None
     wip_reason_machine: bool
     wip_reason_line_spread: bool
     wip_reason_semi_finished: bool
@@ -230,7 +259,9 @@ class GroupSummary(BaseModel):
     eff_fin_avg: float | None
     var: int
     wip_dip: int
+    wip_wash: int
     wip_pre_pi: int
+    wip_post_pi: int
 
 
 class KpiSummary(BaseModel):
@@ -240,7 +271,9 @@ class KpiSummary(BaseModel):
     avg_eff_sew: float | None
     avg_eff_fin: float | None
     total_wip_dip: int
+    total_wip_wash: int
     total_wip_pre_pi: int
+    total_wip_post_pi: int
     lines_with_issue: int
     lines_submitted: int
     lines_total: int
@@ -271,7 +304,9 @@ class WeeklyDayPoint(BaseModel):
     avg_eff_sew: float | None
     avg_eff_fin: float | None
     wip_dip: int
+    wip_wash: int
     wip_pre_pi: int
+    wip_post_pi: int
     lines_submitted: int
 
 
@@ -294,7 +329,9 @@ class WeeklyLineSummary(BaseModel):
     # Stock on hand as of the line's last submitted day in the week - WIP is a
     # point-in-time count, so summing it across days would be meaningless.
     wip_dip: int | None
+    wip_wash: int | None
     wip_pre_pi: int | None
+    wip_post_pi: int | None
     # Number of days in the week each reason was checked.
     wip_machine_days: int
     wip_line_spread_days: int
@@ -310,7 +347,9 @@ class WeeklyKpi(BaseModel):
     avg_eff_sew: float | None
     avg_eff_fin: float | None
     end_wip_dip: int
+    end_wip_wash: int
     end_wip_pre_pi: int
+    end_wip_post_pi: int
     days_with_data: int
     line_days_submitted: int
     issue_line_days: int

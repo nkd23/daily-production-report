@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, Send, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Send, Trash2 } from "lucide-react";
 import { Badge, Button, Input, Label, Textarea } from "./ui";
 import { BuyerInput } from "./BuyerInput";
 import { SubmissionHistory } from "./SubmissionHistory";
@@ -61,13 +61,16 @@ function handleArrowFieldNav(e: React.KeyboardEvent<HTMLElement>) {
 const emptyForm: DailyReportInput = {
   shift_count: 1,
   buyer: "",
+  sam: null,
   out_sew: null,
   eff_sew: null,
   out_fin_scanpack: null,
   out_fin_fin: null,
   eff_fin: null,
   wip_dip: null,
+  wip_wash: null,
   wip_pre_pi: null,
+  wip_post_pi: null,
   wip_reason_machine: false,
   wip_reason_line_spread: false,
   wip_reason_semi_finished: false,
@@ -84,7 +87,18 @@ export function LineEntryCard({
   reportDate: string;
   onSubmitted: () => void;
 }) {
-  const { line, report, is_editable } = item;
+  const { line, report, is_editable, defaults } = item;
+
+  // A day with nothing submitted yet starts from the line's last submission:
+  // buyer, shift count and SAM rarely change day to day.
+  function blankForm(): DailyReportInput {
+    return {
+      ...emptyForm,
+      buyer: defaults?.buyer ?? "",
+      shift_count: defaults?.shift_count ?? 1,
+      sam: defaults?.sam ?? null,
+    };
+  }
   const [form, setForm] = useState<DailyReportInput>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,78 +107,32 @@ export function LineEntryCard({
   const [deleting, setDeleting] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
 
-  const [targetForm, setTargetForm] = useState({
-    sam: String(line.sam || ""),
-    target_output: String(line.target_output || ""),
-    target_eff: String(line.target_eff || ""),
-  });
-  const [targetSaving, setTargetSaving] = useState(false);
-  const [targetError, setTargetError] = useState<string | null>(null);
-
-  function resetTargetForm() {
-    setTargetForm({
-      sam: String(line.sam || ""),
-      target_output: String(line.target_output || ""),
-      target_eff: String(line.target_eff || ""),
-    });
-    setTargetError(null);
-  }
-
-  // Re-sync whenever a different line/date's values come in (e.g. switching
-  // the report date, or right after a save refetches the line).
-  useEffect(() => {
-    resetTargetForm();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [line.id, line.sam, line.target_output, line.target_eff]);
-
-  async function handleSaveTargets(e: React.FormEvent) {
-    e.preventDefault();
-    const sam = Number(targetForm.sam);
-    const target_output = Number(targetForm.target_output);
-    const target_eff = Number(targetForm.target_eff);
-    if (!sam || !target_output || !target_eff) {
-      setTargetError("Vui lòng nhập đủ SAM, Target sản lượng và Target hiệu suất");
-      return;
-    }
-    setTargetSaving(true);
-    setTargetError(null);
-    try {
-      await api.updateLineTargets(line.id, reportDate, { sam, target_output, target_eff });
-      onSubmitted();
-    } catch (err) {
-      setTargetError(err instanceof ApiError ? err.message : "Có lỗi xảy ra, vui lòng thử lại");
-    } finally {
-      setTargetSaving(false);
-    }
-  }
-
-  // Keyed on line/date only (not the `report` object itself) - saving just
-  // the SAM/Target above refetches the line list and hands down a brand new
-  // `report` object (created by update_line_targets, output fields still
-  // null) even though the Tổ trưởng hasn't touched output yet. Re-syncing on
-  // every such refetch would wipe out whatever they'd already typed below
-  // before getting to SAM. Switching to a genuinely different line or date
-  // still needs a full reset, which this still does.
+  // Keyed on line/date only (not the `report` object itself), so a refetch
+  // of the line list (e.g. Thư ký locking/unlocking) doesn't wipe out what
+  // has been typed but not yet submitted.
   useEffect(() => {
     setForm(
-      report
+      report?.is_submitted
         ? {
             shift_count: report.shift_count,
             buyer: report.buyer ?? "",
+            sam: report.sam,
             out_sew: report.out_sew,
             eff_sew: report.eff_sew,
             out_fin_scanpack: report.out_fin_scanpack,
             out_fin_fin: report.out_fin_fin,
             eff_fin: report.eff_fin,
             wip_dip: report.wip_dip,
+            wip_wash: report.wip_wash,
             wip_pre_pi: report.wip_pre_pi,
+            wip_post_pi: report.wip_post_pi,
             wip_reason_machine: report.wip_reason_machine,
             wip_reason_line_spread: report.wip_reason_line_spread,
             wip_reason_semi_finished: report.wip_reason_semi_finished,
             wip_reason_quality: report.wip_reason_quality,
             issue_note: report.issue_note ?? "",
           }
-        : { ...emptyForm }
+        : blankForm()
     );
     setJustSaved(false);
     setError(null);
@@ -183,13 +151,20 @@ export function LineEntryCard({
     { key: "out_fin_fin", label: "OUT-FIN (Fin)" },
     { key: "eff_fin", label: "EFF-FIN" },
     { key: "wip_dip", label: "Tồn Dip" },
+    { key: "wip_wash", label: "Tồn Giặt" },
     { key: "wip_pre_pi", label: "Tồn trước PI" },
+    { key: "wip_post_pi", label: "Tồn Sau PI" },
   ];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setErrorFields(new Set());
+    if (!form.sam || form.sam <= 0) {
+      setError("Vui lòng nhập SAM.");
+      setErrorFields(new Set(["sam"]));
+      return;
+    }
     const missing = REQUIRED_NUMERIC_FIELDS.filter((f) => form[f.key] === null);
     if (missing.length > 0) {
       setError(`Vui lòng nhập đủ các ô sau (nhập 0 nếu không có số liệu): ${missing.map((f) => f.label).join(", ")}`);
@@ -201,7 +176,7 @@ export function LineEntryCard({
       setErrorFields(new Set(["out_fin_fin", "eff_fin"]));
       return;
     }
-    const hasWip = (form.wip_dip ?? 0) > 0 || (form.wip_pre_pi ?? 0) > 0;
+    const hasWip = (form.wip_dip ?? 0) > 0 || (form.wip_wash ?? 0) > 0 || (form.wip_pre_pi ?? 0) > 0 || (form.wip_post_pi ?? 0) > 0;
     if (hasWip) {
       const anyReasonChecked =
         form.wip_reason_machine ||
@@ -241,7 +216,6 @@ export function LineEntryCard({
 
   const submitted = report?.is_submitted ?? false;
   const locked = !is_editable;
-  const targetMissing = line.sam === 0 || line.target_output === 0 || line.target_eff === 0;
 
   async function handleDelete() {
     if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} ngày này?\nKhông thể hoàn tác.`)) {
@@ -251,7 +225,7 @@ export function LineEntryCard({
     setError(null);
     try {
       await api.deleteReport(line.id, reportDate);
-      setForm({ ...emptyForm });
+      setForm(blankForm());
       setHistoryVersion((v) => v + 1);
       onSubmitted();
     } catch (err) {
@@ -270,47 +244,6 @@ export function LineEntryCard({
             <Badge tone={line.pu_group === "PU1" ? "pu1" : "pu2"}>{line.pu_group}</Badge>
             <span className="text-sm text-muted">{line.executive_name}</span>
           </div>
-          <form onSubmit={handleSaveTargets} onKeyDown={handleArrowFieldNav} className="mt-2 flex flex-wrap items-end gap-2">
-            <div>
-              <Label>SAM</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.1"
-                className="w-24"
-                value={targetForm.sam}
-                onChange={(e) => setTargetForm({ ...targetForm, sam: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Target sản lượng</Label>
-              <Input
-                type="number"
-                min={0}
-                className="w-28"
-                value={targetForm.target_output}
-                onChange={(e) => setTargetForm({ ...targetForm, target_output: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Target hiệu suất (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.1"
-                className="w-24"
-                value={targetForm.target_eff}
-                onChange={(e) => setTargetForm({ ...targetForm, target_eff: e.target.value })}
-              />
-            </div>
-            <Button type="submit" size="sm" disabled={targetSaving}>
-              {targetSaving ? "Đang lưu..." : "Lưu"}
-            </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={resetTargetForm} title="Hoàn tác thay đổi chưa lưu">
-              <X size={14} />
-            </Button>
-            {targetError ? <p className="w-full text-xs text-danger">{targetError}</p> : null}
-          </form>
         </div>
         <div className="flex items-center gap-2">
           {locked ? (
@@ -361,6 +294,22 @@ export function LineEntryCard({
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <Label>SAM *</Label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            disabled={locked}
+            value={toFieldValue(form.sam)}
+            onChange={(e) => {
+              setForm({ ...form, sam: parseNumber(e.target.value) });
+              setErrorFields(new Set());
+            }}
+            className={errorFields.has("sam") ? "border-danger ring-2 ring-danger/20" : ""}
+          />
         </div>
         <div>
           <Label>OUT-SEW (SL May+OT) *</Label>
@@ -449,6 +398,20 @@ export function LineEntryCard({
           />
         </div>
         <div>
+          <Label>Tồn Giặt *</Label>
+          <Input
+            type="number"
+            min={0}
+            disabled={locked}
+            value={toFieldValue(form.wip_wash)}
+            onChange={(e) => {
+              setForm({ ...form, wip_wash: parseNumber(e.target.value) });
+              setErrorFields(new Set());
+            }}
+            className={errorFields.has("wip_wash") ? "border-danger ring-2 ring-danger/20" : ""}
+          />
+        </div>
+        <div>
           <Label>Tồn trước PI *</Label>
           <Input
             type="number"
@@ -462,9 +425,26 @@ export function LineEntryCard({
             className={errorFields.has("wip_pre_pi") ? "border-danger ring-2 ring-danger/20" : ""}
           />
         </div>
+        <div>
+          <Label>Tồn Sau PI *</Label>
+          <Input
+            type="number"
+            min={0}
+            disabled={locked}
+            value={toFieldValue(form.wip_post_pi)}
+            onChange={(e) => {
+              setForm({ ...form, wip_post_pi: parseNumber(e.target.value) });
+              setErrorFields(new Set());
+            }}
+            className={errorFields.has("wip_post_pi") ? "border-danger ring-2 ring-danger/20" : ""}
+          />
+        </div>
 
         <div className="col-span-2 sm:col-span-3 lg:col-span-2">
-          <Label>Lý do tồn {(form.wip_dip ?? 0) > 0 || (form.wip_pre_pi ?? 0) > 0 ? "*" : ""}</Label>
+          <Label>
+            Lý do tồn{" "}
+            {(form.wip_dip ?? 0) > 0 || (form.wip_wash ?? 0) > 0 || (form.wip_pre_pi ?? 0) > 0 || (form.wip_post_pi ?? 0) > 0 ? "*" : ""}
+          </Label>
           <div
             className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg pt-1 ${
               errorFields.has("wip_reason_machine") ? "ring-2 ring-danger/30" : ""
@@ -516,10 +496,7 @@ export function LineEntryCard({
         <div className="col-span-2 flex flex-col justify-end gap-2 sm:col-span-3 lg:col-span-2">
           {error ? <p className="text-xs text-danger">{error}</p> : null}
           {justSaved && !error ? <p className="text-xs text-success">Đã lưu thành công</p> : null}
-          {!locked && targetMissing ? (
-            <p className="text-xs text-danger">Cần nhập SAM/Target trước khi nộp báo cáo.</p>
-          ) : null}
-          <Button type="submit" disabled={locked || saving || targetMissing} className="w-full">
+          <Button type="submit" disabled={locked || saving} className="w-full">
             <Send size={15} />
             {saving ? "Đang nộp..." : "Nộp báo cáo"}
           </Button>

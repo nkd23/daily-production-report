@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
 from app.models import DailyReport, Line, ReportHistory, User, UserRole
+from app.services.targets import entry_defaults, resolve_target
 from app.schemas import (
     DailyReportInput,
     DailyReportOut,
+    EntryDefaults,
     LineOut,
-    LineTargetUpdate,
     LineWithReportOut,
     ReportHistoryOut,
     UnlockRequest,
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 HISTORY_FIELDS = (
     "shift_count", "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
-    "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_pre_pi",
+    "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_wash", "wip_pre_pi", "wip_post_pi",
     "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished", "wip_reason_quality",
     "issue_note",
 )
@@ -62,41 +63,46 @@ def _record_history(
     )
 
 
-def _report_out(report: DailyReport, line: Line) -> DailyReportOut:
-    """VAR compares against the target entered on this exact report row only -
-    no fallback to the Line's "Cấu hình Line" default (see app.services.
-    aggregation module docstring). submit_report already requires a target
-    before output can be submitted, so report.target_output should always be
-    set in practice; var is None only for legacy rows that predate that rule."""
+def _report_out(report: DailyReport, line: Line, viewer: User) -> DailyReportOut:
+    """VAR compares against the target copied onto this report row (see
+    app.services.targets). Tổ trưởng never receive target-derived numbers -
+    their target is set by their Executive and deliberately hidden from them."""
     out = DailyReportOut.model_validate(report)
     out.is_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-    out.var = (
-        (report.out_fin_fin - report.target_output)
-        if report.out_fin_fin is not None and report.target_output
-        else None
-    )
+    if viewer.role == UserRole.to_truong:
+        out.var = None
+    else:
+        out.var = (
+            (report.out_fin_fin - report.target_output)
+            if report.out_fin_fin is not None and report.target_output
+            else None
+        )
     return out
 
 
-def _resolve_day_target(report: DailyReport | None) -> tuple[float, int, float]:
-    """SAM/target_output/target_eff for the entry form, from report_date's own
-    row only. If Tổ trưởng hasn't set these for this exact day yet, they come
-    back blank (0) rather than carrying over an earlier day's edit or the
-    Line's "Cấu hình Line" bootstrap default - every new day must be entered
-    by hand (see app.services.aggregation module docstring)."""
-    if report is not None and report.sam is not None and report.target_output is not None and report.target_eff is not None:
-        return float(report.sam), report.target_output, float(report.target_eff)
-    return 0.0, 0, 0.0
-
-
-def _line_out(line: Line, sam: float, target_output: int, target_eff: float) -> LineOut:
-    """LineOut with sam/target_output/target_eff overridden to whatever was
-    resolved as true for the report_date in question (see _resolve_day_target) -
-    NOT the Line's own field, which is bootstrap-only and no longer surfaces here."""
+def _line_out(db: Session, line: Line, report_date: date, viewer: User) -> LineOut:
+    """LineOut whose target_output/target_eff are the target in force on
+    report_date - blanked for Tổ trưởng. sam is unused here (it lives on the
+    report and in the entry defaults)."""
     out = LineOut.model_validate(line)
     out.to_truong_name = line.to_truong.full_name if line.to_truong else None
-    out.sam, out.target_output, out.target_eff = sam, target_output, target_eff
+    target = None if viewer.role == UserRole.to_truong else resolve_target(db, line.id, report_date)
+    out.sam = 0
+    out.target_output, out.target_eff = target if target else (0, 0)
     return out
+
+
+def _with_report(db: Session, line: Line, report: DailyReport | None, report_date: date, viewer: User, is_editable: bool):
+    defaults = None
+    if report is None or not report.is_submitted:
+        d = entry_defaults(db, line.id, report_date)
+        defaults = EntryDefaults(**d) if d else None
+    return LineWithReportOut(
+        line=_line_out(db, line, report_date, viewer),
+        report=_report_out(report, line, viewer) if report is not None else None,
+        is_editable=is_editable,
+        defaults=defaults,
+    )
 
 
 def _get_line_or_404(db: Session, line_id: int) -> Line:
@@ -159,19 +165,13 @@ def get_my_lines(
     result = []
     for line in lines:
         report = reports.get(line.id)
-        sam, target_output, target_eff = _resolve_day_target(report)
-
-        if report is not None:
-            report_out = _report_out(report, line)
-            is_editable = current_user.role != UserRole.to_truong or not report_out.is_locked
-        else:
-            report_out = None
-            is_editable = current_user.role != UserRole.to_truong or not resolve_effective_lock(report_date, False, False)
-        result.append(
-            LineWithReportOut(
-                line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=is_editable
-            )
+        locked = (
+            resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+            if report is not None
+            else resolve_effective_lock(report_date, False, False)
         )
+        is_editable = current_user.role != UserRole.to_truong or not locked
+        result.append(_with_report(db, line, report, report_date, current_user, is_editable))
     return result
 
 
@@ -179,6 +179,7 @@ def get_my_lines(
 def get_line_report(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Fetch a single line/date report for Thư ký/Sếp to inspect or submit on
@@ -187,9 +188,7 @@ def get_line_report(
     report = db.scalar(
         select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
     )
-    sam, target_output, target_eff = _resolve_day_target(report)
-    report_out = _report_out(report, line) if report else None
-    return LineWithReportOut(line=_line_out(line, sam, target_output, target_eff), report=report_out, is_editable=True)
+    return _with_report(db, line, report, report_date, current_user, is_editable=True)
 
 
 @router.get("/lines/{line_id}/recent", response_model=list[DailyReportOut])
@@ -223,7 +222,7 @@ def get_recent_reports(
         .order_by(DailyReport.report_date.desc())
         .limit(limit)
     ).all()
-    return [_report_out(r, line) for r in reports]
+    return [_report_out(r, line, current_user) for r in reports]
 
 
 @router.post("/lines/{line_id}", response_model=DailyReportOut)
@@ -252,14 +251,6 @@ def submit_report(
         report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
 
-    # SAM/target must be entered (via update_line_targets) before output can be
-    # submitted for this day - see _resolve_day_target, there is no fallback.
-    if report.sam is None or report.target_output is None or report.target_eff is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Vui lòng nhập SAM / Target sản lượng / Target hiệu suất cho ngày này trước khi nộp báo cáo",
-        )
-
     if (payload.out_fin_fin == 0) != (payload.eff_fin == 0):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -274,7 +265,7 @@ def submit_report(
     no_reason_declared = note == "0"
     if no_reason_declared:
         payload.issue_note = None
-    has_wip = (payload.wip_dip or 0) > 0 or (payload.wip_pre_pi or 0) > 0
+    has_wip = (payload.wip_dip or 0) > 0 or (payload.wip_wash or 0) > 0 or (payload.wip_pre_pi or 0) > 0 or (payload.wip_post_pi or 0) > 0
     if has_wip:
         any_reason = (
             payload.wip_reason_machine
@@ -292,11 +283,16 @@ def submit_report(
     old_snapshot = _snapshot(report)
 
     for field in (
-        "shift_count", "buyer", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin",
-        "wip_dip", "wip_pre_pi", "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished",
+        "shift_count", "buyer", "sam", "out_sew", "eff_sew", "out_fin_scanpack", "out_fin_fin", "eff_fin",
+        "wip_dip", "wip_wash", "wip_pre_pi", "wip_post_pi", "wip_reason_machine", "wip_reason_line_spread", "wip_reason_semi_finished",
         "wip_reason_quality", "issue_note",
     ):
         setattr(report, field, getattr(payload, field))
+
+    # The target is the Executive's standing target for this date, never
+    # something the submitter enters (see app.services.targets).
+    target = resolve_target(db, line_id, report_date)
+    report.target_output, report.target_eff = target if target else (None, None)
 
     report.is_submitted = True
     report.submitted_by = current_user.id
@@ -309,57 +305,7 @@ def submit_report(
 
     db.commit()
     db.refresh(report)
-    return _report_out(report, line)
-
-
-@router.patch("/lines/{line_id}/targets", response_model=LineOut)
-def update_line_targets(
-    line_id: int,
-    payload: LineTargetUpdate,
-    report_date: date = Query(default_factory=local_today),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Let a line's own Tổ trưởng (in addition to Thư ký/Sếp) set SAM / NEW
-    OUT-TAR / NEW EFF-TAR for a specific day - these can change day to
-    day (the factory re-sets them whenever the buyer/style on a line changes),
-    so they are stored on that day's report row, not as a fixed Line property.
-    Line.sam/target_output/target_eff is deliberately left untouched here: the
-    entry form no longer reads it at all (see _resolve_day_target) - it only
-    exists as a fallback inside VAR/dashboard math for a report that already
-    has output but was never given its own target (see _report_out and
-    app.services.aggregation.build_line_summaries).
-    """
-    line = _get_line_or_404(db, line_id)
-    _assert_line_access(current_user, line)
-    _assert_date_allowed(current_user, report_date)
-
-    report = db.scalar(
-        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
-    )
-    if report is not None:
-        effective_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-        if current_user.role == UserRole.to_truong and effective_locked:
-            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-    else:
-        if current_user.role == UserRole.to_truong and resolve_effective_lock(report_date, False, False):
-            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-        report = DailyReport(line_id=line_id, report_date=report_date)
-        db.add(report)
-
-    old_snapshot = _snapshot(report)
-
-    report.sam = payload.sam
-    report.target_output = payload.target_output
-    report.target_eff = payload.target_eff
-
-    _record_history(
-        db, line_id=line_id, report_date=report_date, action="target_update",
-        changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
-    )
-
-    db.commit()
-    return _line_out(line, payload.sam, payload.target_output, payload.target_eff)
+    return _report_out(report, line, current_user)
 
 
 @router.delete("/lines/{line_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -421,8 +367,13 @@ def get_report_history(
     ]
 
 
-@router.patch("/{report_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
-def set_lock(report_id: int, payload: UnlockRequest, db: Session = Depends(get_db)):
+@router.patch("/{report_id}/lock", response_model=DailyReportOut)
+def set_lock(
+    report_id: int,
+    payload: UnlockRequest,
+    current_user: User = Depends(require_thu_ky_or_sep),
+    db: Session = Depends(get_db),
+):
     report = db.get(DailyReport, report_id)
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy báo cáo")
@@ -431,14 +382,15 @@ def set_lock(report_id: int, payload: UnlockRequest, db: Session = Depends(get_d
     db.commit()
     db.refresh(report)
     line = _get_line_or_404(db, report.line_id)
-    return _report_out(report, line)
+    return _report_out(report, line, current_user)
 
 
-@router.patch("/lines/{line_id}/lock", response_model=DailyReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
+@router.patch("/lines/{line_id}/lock", response_model=DailyReportOut)
 def set_lock_by_line(
     line_id: int,
     payload: UnlockRequest,
     report_date: date = Query(default_factory=local_today),
+    current_user: User = Depends(require_thu_ky_or_sep),
     db: Session = Depends(get_db),
 ):
     """Unlock (or lock) a line/date even if Tổ trưởng has not submitted
@@ -455,4 +407,4 @@ def set_lock_by_line(
     report.secretary_override = True
     db.commit()
     db.refresh(report)
-    return _report_out(report, line)
+    return _report_out(report, line, current_user)

@@ -3,6 +3,7 @@ import type {
   DailyReportInput,
   DashboardResponse,
   Line,
+  LineTargetRow,
   LineWithReport,
   ReportHistoryEntry,
   User,
@@ -101,15 +102,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateLineTargets: (
-    lineId: number,
-    reportDate: string,
-    payload: { sam: number; target_output: number; target_eff: number }
-  ) =>
-    request<Line>(`/api/reports/lines/${lineId}/targets?report_date=${reportDate}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+  listTargets: (asOf: string) => request<LineTargetRow[]>(`/api/targets?as_of=${asOf}`),
+  setTarget: (lineId: number, payload: { target_output: number; target_eff: number; effective_from: string }) =>
+    request<LineTargetRow>(`/api/targets/${lineId}`, { method: "PUT", body: JSON.stringify(payload) }),
   setLockByLine: (lineId: number, reportDate: string, isLocked: boolean) =>
     request<DailyReport>(
       `/api/reports/lines/${lineId}/lock?report_date=${reportDate}`,

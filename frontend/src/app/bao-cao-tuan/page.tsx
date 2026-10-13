@@ -199,7 +199,7 @@ function WeeklyContent() {
             <StatCard
               label="Tồn trước PI cuối tuần"
               value={fmt(data.kpi.end_wip_pre_pi)}
-              sub={`Tồn Dip: ${fmt(data.kpi.end_wip_dip)}`}
+              sub={`Dip: ${fmt(data.kpi.end_wip_dip)} · Giặt: ${fmt(data.kpi.end_wip_wash)} · Sau PI: ${fmt(data.kpi.end_wip_post_pi)}`}
               tone={data.kpi.end_wip_pre_pi > 0 ? "warning" : "success"}
               icon={PackageOpen}
             />
@@ -249,7 +249,7 @@ function WeeklyContent() {
             )}
 
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[920px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                     <th className="px-3 py-2 font-medium">Ngày</th>
@@ -260,7 +260,9 @@ function WeeklyContent() {
                     <th className="px-3 py-2 text-right font-medium">EFF-SEW</th>
                     <th className="px-3 py-2 text-right font-medium">EFF-FIN</th>
                     <th className="px-3 py-2 text-right font-medium">Tồn Dip</th>
+                    <th className="px-3 py-2 text-right font-medium">Tồn Giặt</th>
                     <th className="px-3 py-2 text-right font-medium">Tồn trước PI</th>
+                    <th className="px-3 py-2 text-right font-medium">Tồn Sau PI</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -270,7 +272,7 @@ function WeeklyContent() {
                         <td className="px-3 py-2">
                           {WEEKDAYS[i]} {ddmm(p.report_date)}
                         </td>
-                        <td colSpan={8} className="px-3 py-2 text-center text-xs italic">
+                        <td colSpan={10} className="px-3 py-2 text-center text-xs italic">
                           Không có báo cáo
                         </td>
                       </tr>
@@ -288,7 +290,9 @@ function WeeklyContent() {
                         <td className="px-3 py-2 text-right">{fmt(p.avg_eff_sew, "%")}</td>
                         <td className="px-3 py-2 text-right">{fmt(p.avg_eff_fin, "%")}</td>
                         <td className="px-3 py-2 text-right">{fmt(p.wip_dip)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(p.wip_wash)}</td>
                         <td className="px-3 py-2 text-right">{fmt(p.wip_pre_pi)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(p.wip_post_pi)}</td>
                       </tr>
                     )
                   )}
@@ -304,7 +308,13 @@ function WeeklyContent() {
                       {fmt(data.kpi.end_wip_dip)}
                     </td>
                     <td className="px-3 py-2 text-right" title="Số tồn cuối tuần">
+                      {fmt(data.kpi.end_wip_wash)}
+                    </td>
+                    <td className="px-3 py-2 text-right" title="Số tồn cuối tuần">
                       {fmt(data.kpi.end_wip_pre_pi)}
+                    </td>
+                    <td className="px-3 py-2 text-right" title="Số tồn cuối tuần">
+                      {fmt(data.kpi.end_wip_post_pi)}
                     </td>
                   </tr>
                 </tbody>
@@ -358,7 +368,7 @@ function WeeklyContent() {
           <Card className="overflow-hidden p-0">
             <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">Chi tiết theo line</h2>
             <div className="mt-3 max-h-[560px] overflow-auto">
-              <table className="w-full min-w-[1150px] text-left text-sm">
+              <table className="w-full min-w-[1320px] text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-surface">
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                     <th className="px-3 py-2 font-medium">Line</th>
@@ -372,7 +382,9 @@ function WeeklyContent() {
                     <th className="px-3 py-2 text-right font-medium">EFF-FIN</th>
                     <th className="px-3 py-2 text-right font-medium">VAR</th>
                     <th className="px-3 py-2 text-right font-medium">Tồn Dip</th>
+                    <th className="px-3 py-2 text-right font-medium">Tồn Giặt</th>
                     <th className="px-3 py-2 text-right font-medium">Tồn trước PI</th>
+                    <th className="px-3 py-2 text-right font-medium">Tồn Sau PI</th>
                     <th className="px-3 py-2 font-medium">Lý do tồn</th>
                   </tr>
                 </thead>
@@ -394,7 +406,7 @@ function WeeklyContent() {
                               {l.executive_name}
                             </span>
                           </td>
-                          <td colSpan={11} className="px-3 py-2">
+                          <td colSpan={13} className="px-3 py-2">
                             <Badge tone="warning">Chưa nộp ngày nào trong tuần</Badge>
                           </td>
                         </tr>
@@ -430,7 +442,9 @@ function WeeklyContent() {
                           {fmt(l.var)}
                         </td>
                         <td className="px-3 py-2 text-right">{fmt(l.wip_dip)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(l.wip_wash)}</td>
                         <td className="px-3 py-2 text-right">{fmt(l.wip_pre_pi)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(l.wip_post_pi)}</td>
                         <td className="px-3 py-2">
                           {reasons.length === 0 ? (
                             <span className="text-muted">-</span>

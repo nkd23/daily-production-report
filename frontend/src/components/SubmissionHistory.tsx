@@ -81,7 +81,7 @@ export function SubmissionHistory({
         <History size={14} /> Lịch sử đã nhập
       </h4>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1020px] text-left text-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
               <th className="whitespace-nowrap px-2 py-1.5 font-medium">Ngày</th>
@@ -93,7 +93,9 @@ export function SubmissionHistory({
               <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">OUT-FIN</th>
               <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">EFF-FIN</th>
               <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">Tồn Dip</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">Tồn Giặt</th>
               <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">Tồn trước PI</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">Tồn Sau PI</th>
               <th className="whitespace-nowrap px-2 py-1.5 font-medium">Lý do tồn</th>
               <th className="whitespace-nowrap px-2 py-1.5 font-medium">Issue</th>
               <th className="whitespace-nowrap px-2 py-1.5 font-medium text-right">Xóa</th>
@@ -111,7 +113,9 @@ export function SubmissionHistory({
                 <td className="px-2 py-1.5 text-right">{num(r.out_fin_fin)}</td>
                 <td className="px-2 py-1.5 text-right">{pct(r.eff_fin)}</td>
                 <td className="px-2 py-1.5 text-right">{num(r.wip_dip)}</td>
+                <td className="px-2 py-1.5 text-right">{num(r.wip_wash)}</td>
                 <td className="px-2 py-1.5 text-right">{num(r.wip_pre_pi)}</td>
+                <td className="px-2 py-1.5 text-right">{num(r.wip_post_pi)}</td>
                 <td className="px-2 py-1.5">{wipReasonBadges(r)}</td>
                 <td className="max-w-[200px] truncate px-2 py-1.5 text-muted">{r.issue_note ?? "-"}</td>
                 <td className="px-2 py-1.5 text-right">

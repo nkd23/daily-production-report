@@ -1,11 +1,11 @@
 """Excel export that reproduces the factory's original daily report layout:
 
 Line | NEW OUT-TAR | NEW EFF-TAR | Buyer | SAM | Shift | OUT-SEW | EFF-SEW |
-OUT-FIN(ScanPack) | OUT-FIN(Fin) | EFF-FIN | VAR | Tồn Dip | Tồn trước PI |
-Issue/Lí do
+OUT-FIN(ScanPack) | OUT-FIN(Fin) | EFF-FIN | VAR | Tồn Dip | Tồn Giặt | Tồn trước PI |
+Tồn Sau PI | Issue/Lí do
 
 (The original sheet had a single "WIP FIN" column here; the factory split it
-into the two stock readings the Tổ trưởng actually reports at end of shift.)
+into the stock readings the Tổ trưởng actually reports at end of shift.)
 
 Rows: one per Line, grouped by Executive (subtotal row after each group),
 then by PU1/PU2 (subtotal row after each PU), then a final TTL row.
@@ -43,7 +43,9 @@ COLUMNS = [
     ("EFF-FIN", 11),
     ("VAR", 10),
     ("Tồn Dip", 11),
+    ("Tồn Giặt", 11),
     ("Tồn trước PI", 13),
+    ("Tồn Sau PI", 12),
     ("Issue/Lí do", 40),
 ]
 
@@ -118,13 +120,15 @@ NUMBER_FORMATS = {
     11: "0.0\"%\"",   # EFF-FIN
     12: "#,##0",      # VAR
     13: "#,##0",      # Tồn Dip
-    14: "#,##0",      # Tồn trước PI
+    14: "#,##0",      # Tồn Giặt
+    15: "#,##0",      # Tồn trước PI
+    16: "#,##0",      # Tồn Sau PI
 }
 
 EFF_SEW_COL = 8
 EFF_FIN_COL = 11
 VAR_COL = 12
-ISSUE_COL = 15
+ISSUE_COL = 17
 
 
 def _line_row_values(line: LineDaySummary) -> list:
@@ -145,7 +149,9 @@ def _line_row_values(line: LineDaySummary) -> list:
         float(line.eff_fin) if line.eff_fin is not None else None,
         line.var,
         line.wip_dip,
+        line.wip_wash,
         line.wip_pre_pi,
+        line.wip_post_pi,
         line.issue_note or "",
     ]
 
@@ -169,7 +175,9 @@ def _subtotal_row_values(label: str, items: list[LineDaySummary], sam_avg: float
         _shift_weighted_avg([(i.eff_fin_weight, float(i.eff_fin) if i.eff_fin is not None else None) for i in items]),
         sum((i.var or 0) for i in items),
         sum((i.wip_dip or 0) for i in items),
+        sum((i.wip_wash or 0) for i in items),
         sum((i.wip_pre_pi or 0) for i in items),
+        sum((i.wip_post_pi or 0) for i in items),
         "",
     ]
 

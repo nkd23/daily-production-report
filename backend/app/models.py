@@ -56,11 +56,9 @@ class Line(Base):
     line_number: Mapped[str] = mapped_column(Unicode(20), unique=True, nullable=False)
     executive_name: Mapped[str] = mapped_column(Unicode(100), nullable=False)
     pu_group: Mapped[PuGroup] = mapped_column(Enum(PuGroup), nullable=False)
-    # Not read anywhere in the app's calculations - every day's SAM/target
-    # must be entered on that day's own daily_reports row (see
-    # routers/reports.py's _resolve_day_target, app.services.aggregation.
-    # build_line_summaries, and _report_out's VAR calc, none of which fall
-    # back to this field). Only editable via "Cấu hình Line", purely for
+    # Not read anywhere in the app's calculations - SAM is entered on each
+    # daily_reports row and targets come from line_targets (see
+    # app.services.targets). Only editable via "Cấu hình Line", purely for
     # admin reference - has no effect on the Dashboard, entry form, or Excel
     # export.
     sam: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
@@ -96,12 +94,11 @@ class DailyReport(Base):
     # submission (can change day to day on the same line), not a fixed Line
     # attribute. Always stored upper-case.
     buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
-    # SAM / target output / target EFF as they stood on this specific day -
-    # the factory's sheet shows these changing daily (SAM tracks whatever
-    # style/buyer is running), not just weekly. Nullable because most report
-    # rows are only ever touched via the OUT-SEW/EFF-SEW submission and never
-    # via the "Cập nhật SAM/Target" edit; when null, callers fall back to the
-    # Line's last-known default (see app.services.aggregation).
+    # SAM as entered by the Tổ trưởng on submit (pre-filled from the last
+    # report). target_output/target_eff are a copy of the line's standing
+    # target in force on this date (app.services.targets) - never entered by
+    # the Tổ trưởng, and kept per row so past days keep the target they were
+    # judged against. Nullable for rows created only by a lock/unlock.
     sam: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     target_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
     target_eff: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
@@ -116,7 +113,9 @@ class DailyReport(Base):
     # exported to backup_wip_fin_truoc_khi_xoa.csv before removal rather than
     # being carried over, since the numbers are not comparable.
     wip_dip: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wip_wash: Mapped[int | None] = mapped_column(Integer, nullable=True)
     wip_pre_pi: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wip_post_pi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Reason tags for the day's WIP (tồn), applying to the report as a whole
     # rather than to wip_dip/wip_pre_pi individually - a Tổ trưởng may check
     # any combination of these.
@@ -140,6 +139,28 @@ class DailyReport(Base):
 
     line: Mapped["Line"] = relationship(back_populates="reports")
     submitted_by_user: Mapped["User | None"] = relationship(foreign_keys=[submitted_by])
+
+
+class LineTarget(Base):
+    """A line's target (NEW OUT-TAR / NEW EFF-TAR) from effective_from onward,
+    until the next row for the same line. Set by that line's Executive (or
+    Thư ký/Manager), usually weekly; Tổ trưởng never see or set it. Each
+    daily_reports row keeps a copy of the target in force on its date (see
+    app.services.targets), so past reports keep the target they were judged
+    against even after a later change."""
+
+    __tablename__ = "line_targets"
+    __table_args__ = (UniqueConstraint("line_id", "effective_from", name="uq_line_target_from"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False, index=True)
+    effective_from: Mapped["Date"] = mapped_column(Date, nullable=False)
+    target_output: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_eff: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False)
+    set_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    set_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+
+    set_by_user: Mapped["User | None"] = relationship(foreign_keys=[set_by])
 
 
 class LoginFailure(Base):

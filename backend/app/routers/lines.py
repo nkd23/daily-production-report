@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.deps import get_current_user, require_thu_ky_or_sep
-from app.models import DailyReport, Line, ReportHistory, User, UserRole
+from app.models import DailyReport, Line, LineTarget, ReportHistory, User, UserRole
 from app.schemas import LineCreate, LineOut, LineUpdate
 
 router = APIRouter(prefix="/api/lines", tags=["lines"])
@@ -81,5 +81,6 @@ def delete_line_permanently(line_id: int, db: Session = Depends(get_db)):
     # Line itself is gone there is nothing left for that trail to refer to.
     db.query(ReportHistory).filter(ReportHistory.line_id == line_id).delete()
     db.query(DailyReport).filter(DailyReport.line_id == line_id).delete()
+    db.query(LineTarget).filter(LineTarget.line_id == line_id).delete()
     db.delete(line)
     db.commit()

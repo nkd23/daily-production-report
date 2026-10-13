@@ -24,7 +24,7 @@ export function SummaryTable({
 }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[900px] text-left text-sm">
+      <table className="w-full min-w-[1060px] text-left text-sm">
         <thead>
           <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
             <th className="px-4 py-2 font-medium">Executive / PU</th>
@@ -39,7 +39,9 @@ export function SummaryTable({
             <th className="px-4 py-2 text-right font-medium">EFF-FIN</th>
             <th className="px-4 py-2 text-right font-medium">VAR</th>
             <th className="px-4 py-2 text-right font-medium">Tồn Dip{wipHeaderSuffix}</th>
+            <th className="px-4 py-2 text-right font-medium">Tồn Giặt{wipHeaderSuffix}</th>
             <th className="px-4 py-2 text-right font-medium">Tồn trước PI{wipHeaderSuffix}</th>
+            <th className="px-4 py-2 text-right font-medium">Tồn Sau PI{wipHeaderSuffix}</th>
           </tr>
         </thead>
         <tbody>
@@ -86,18 +88,20 @@ export function SummaryTable({
                   {row.var.toLocaleString("vi-VN")}
                 </td>
                 <td className="px-4 py-2 text-right">{row.wip_dip.toLocaleString("vi-VN")}</td>
+                <td className="px-4 py-2 text-right">{row.wip_wash.toLocaleString("vi-VN")}</td>
                 <td
                   className={`px-4 py-2 text-right ${wipCellCls}`}
                   title={wipAlert ? "Tồn trước PI đang nhiều hơn OUT-FIN (Fin)" : undefined}
                 >
                   {row.wip_pre_pi.toLocaleString("vi-VN")}
                 </td>
+                <td className="px-4 py-2 text-right">{row.wip_post_pi.toLocaleString("vi-VN")}</td>
               </tr>
             );
           })}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={13} className="px-4 py-8 text-center text-sm text-muted">
+              <td colSpan={15} className="px-4 py-8 text-center text-sm text-muted">
                 {emptyText}
               </td>
             </tr>

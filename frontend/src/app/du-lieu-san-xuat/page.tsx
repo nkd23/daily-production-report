@@ -142,9 +142,11 @@ function LineRow({ line }: { line: LineDaySummary }) {
         {num(line.var)}
       </td>
       <td className="px-3 py-2 text-right">{num(line.wip_dip)}</td>
+      <td className="px-3 py-2 text-right">{num(line.wip_wash)}</td>
       <td className={`px-3 py-2 text-right ${wipAlert}`} title={wipAlert ? "Tồn trước PI đang nhiều hơn OUT-FIN (Fin)" : undefined}>
         {num(line.wip_pre_pi)}
       </td>
+      <td className="px-3 py-2 text-right">{num(line.wip_post_pi)}</td>
       <td className="px-3 py-2">{wipReasonBadges(line)}</td>
       <td className="px-3 py-2">
         {line.is_submitted ? <Badge tone="success">Đã nộp</Badge> : <Badge tone="warning">Chưa nộp</Badge>}
@@ -184,9 +186,11 @@ function SubtotalRow({ row }: { row: GroupSummary | undefined }) {
       <td className="px-3 py-2 text-right">{pct(row.eff_fin_avg)}</td>
       <td className={`px-3 py-2 text-right ${row.var < 0 ? "text-danger" : ""}`}>{num(row.var)}</td>
       <td className="px-3 py-2 text-right">{num(row.wip_dip)}</td>
+      <td className="px-3 py-2 text-right">{num(row.wip_wash)}</td>
       <td className={`px-3 py-2 text-right ${wipCellCls}`} title={wipAlert ? "Tồn trước PI đang nhiều hơn OUT-FIN (Fin)" : undefined}>
         {num(row.wip_pre_pi)}
       </td>
+      <td className="px-3 py-2 text-right">{num(row.wip_post_pi)}</td>
       <td className="px-3 py-2" colSpan={3} />
     </tr>
   );
@@ -373,7 +377,7 @@ function DuLieuSanXuatContent() {
 
           <Card className="overflow-hidden p-0">
           <div className="max-h-[calc(100vh-260px)] overflow-auto">
-            <table className="w-full min-w-[1550px] text-left text-sm">
+            <table className="w-full min-w-[1740px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Line</th>
@@ -389,7 +393,9 @@ function DuLieuSanXuatContent() {
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">EFF-FIN</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">VAR</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn Dip</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn Giặt</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn trước PI</th>
+                  <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 text-right font-medium">Tồn Sau PI</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Lý do tồn</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Trạng thái</th>
                   <th className="sticky top-0 z-10 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">Issue</th>
@@ -422,7 +428,7 @@ function DuLieuSanXuatContent() {
                 {hasActiveFilter ? null : <SubtotalRow row={ttlRow} />}
                 {groups.length === 0 ? (
                   <tr>
-                    <td colSpan={17} className="px-4 py-10 text-center text-sm text-muted">
+                    <td colSpan={19} className="px-4 py-10 text-center text-sm text-muted">
                       {hasActiveFilter ? "Không có line nào khớp bộ lọc." : "Chưa có line nào được cấu hình."}
                     </td>
                   </tr>

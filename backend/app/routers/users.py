@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_thu_ky_or_sep
-from app.models import DailyReport, Line, ReportHistory, User, UserRole
+from app.models import DailyReport, Line, LineTarget, ReportHistory, User, UserRole
 from app.schemas import UserCreate, UserOut, UserUpdate
 from app.security import hash_password
 
@@ -82,6 +82,7 @@ def delete_user(user_id: int, current_user: User = Depends(require_thu_ky_or_sep
     # own docstring about surviving a deleted daily_reports row.
     db.query(DailyReport).filter(DailyReport.submitted_by == user.id).update({"submitted_by": None})
     db.query(ReportHistory).filter(ReportHistory.changed_by == user.id).update({"changed_by": None})
+    db.query(LineTarget).filter(LineTarget.set_by == user.id).update({"set_by": None})
     # A Tổ trưởng account may be assigned to lines - unassign rather than
     # leave a dangling reference.
     db.query(Line).filter(Line.to_truong_user_id == user.id).update({"to_truong_user_id": None})
