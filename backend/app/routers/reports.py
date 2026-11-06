@@ -22,6 +22,10 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
+# Mistyped output in an EFF box (e.g. 1300) would otherwise skew every
+# Executive/PU/TTL average. Keep in sync with LineEntryCard.tsx.
+MAX_EFF_PERCENT = 150
+
 HISTORY_FIELDS = (
     "shift_count", "buyer", "sam", "target_output", "target_eff", "out_sew", "eff_sew",
     "out_fin_scanpack", "out_fin_fin", "eff_fin", "wip_dip", "wip_wash", "wip_pre_pi", "wip_post_pi",
@@ -250,6 +254,12 @@ def submit_report(
             raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
         report = DailyReport(line_id=line_id, report_date=report_date)
         db.add(report)
+
+    if (payload.eff_sew or 0) >= MAX_EFF_PERCENT or (payload.eff_fin or 0) >= MAX_EFF_PERCENT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Hiệu suất phải dưới {MAX_EFF_PERCENT}%, vui lòng kiểm tra lại số liệu.",
+        )
 
     if (payload.out_fin_fin == 0) != (payload.eff_fin == 0):
         raise HTTPException(

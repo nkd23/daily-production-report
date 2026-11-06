@@ -58,6 +58,9 @@ function handleArrowFieldNav(e: React.KeyboardEvent<HTMLElement>) {
   }
 }
 
+// Keep in sync with MAX_EFF_PERCENT in backend/app/routers/reports.py.
+const MAX_EFF_PERCENT = 150;
+
 const emptyForm: DailyReportInput = {
   shift_count: 1,
   buyer: "",
@@ -169,6 +172,12 @@ export function LineEntryCard({
     if (missing.length > 0) {
       setError(`Vui lòng nhập đủ các ô sau (nhập 0 nếu không có số liệu): ${missing.map((f) => f.label).join(", ")}`);
       setErrorFields(new Set(missing.map((f) => f.key)));
+      return;
+    }
+    const overLimit = (["eff_sew", "eff_fin"] as const).filter((k) => (form[k] ?? 0) >= MAX_EFF_PERCENT);
+    if (overLimit.length > 0) {
+      setError(`Hiệu suất phải dưới ${MAX_EFF_PERCENT}%, vui lòng kiểm tra lại số liệu.`);
+      setErrorFields(new Set(overLimit));
       return;
     }
     if ((form.out_fin_fin === 0) !== (form.eff_fin === 0)) {

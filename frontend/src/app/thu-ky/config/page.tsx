@@ -25,6 +25,9 @@ function ConfigContent() {
 
   const toTruongs = users?.filter((u) => u.role === "to_truong" && u.is_active) ?? [];
   const executiveNames = [...new Set((lines ?? []).map((l) => l.executive_name))].sort();
+  const hiddenCount = (lines ?? []).filter((l) => !l.is_active).length;
+  // Hidden lines first: they are the ones someone comes here looking for.
+  const sortedLines = [...(lines ?? [])].sort((a, b) => Number(a.is_active) - Number(b.is_active));
 
   return (
     <PageShell title="Cấu hình Line & tài khoản" description="Quản lý danh sách line, target, và phân công Tổ trưởng phụ trách">
@@ -37,7 +40,9 @@ function ConfigContent() {
         </Card>
 
         <Card className="overflow-hidden">
-          <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">Danh sách Line ({lines?.length ?? 0})</h2>
+          <h2 className="px-5 pt-5 text-sm font-semibold text-foreground">
+            Danh sách Line ({lines?.length ?? 0}){hiddenCount > 0 ? ` · ${hiddenCount} line đang ẩn` : ""}
+          </h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[700px] text-left text-sm">
               <thead>
@@ -51,7 +56,7 @@ function ConfigContent() {
                 </tr>
               </thead>
               <tbody>
-                {lines?.map((line) => (
+                {sortedLines.map((line) => (
                   <LineConfigRow key={line.id} line={line} toTruongs={toTruongs} onChanged={load} />
                 ))}
               </tbody>

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Trash, Trash2 } from "lucide-react";
+import { Check, Eye, Trash, Trash2 } from "lucide-react";
 import { Badge, Button, Input, Select } from "./ui";
 import { api, ApiError } from "@/lib/api";
 import type { Line, PuGroup, User } from "@/lib/types";
+
+const EDITABLE_FIELDS = ["line_number", "executive_name", "pu_group", "to_truong_user_id"] as const;
 
 export function LineConfigRow({
   line,
@@ -19,25 +21,19 @@ export function LineConfigRow({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = JSON.stringify(form) !== JSON.stringify(line);
+  // Only the editable fields: is_active changes through its own buttons, so
+  // it must not make this row look unsaved or get written back by Lưu.
+  const dirty = EDITABLE_FIELDS.some((f) => form[f] !== line[f]);
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
-      // sam/target_output/target_eff have no input in this row anymore (SAM
-      // and Target are entered fresh per day by the Tổ trưởng, not edited
-      // here) - pass the untouched bootstrap values through unchanged since
-      // the API still requires them on every update.
       await api.updateLine(line.id, {
         line_number: form.line_number,
         executive_name: form.executive_name,
         pu_group: form.pu_group,
-        sam: Number(form.sam),
-        target_output: Number(form.target_output),
-        target_eff: Number(form.target_eff),
         to_truong_user_id: form.to_truong_user_id,
-        is_active: form.is_active,
       });
       onChanged();
     } catch (err) {
@@ -51,6 +47,16 @@ export function LineConfigRow({
     if (!confirm(`Ẩn line ${line.line_number}? Line sẽ không còn hiển thị cho Tổ trưởng/Dashboard.`)) return;
     await api.deactivateLine(line.id);
     onChanged();
+  }
+
+  async function reactivate() {
+    setError(null);
+    try {
+      await api.updateLine(line.id, { is_active: true });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Không bỏ ẩn được line");
+    }
   }
 
   async function deletePermanently() {
@@ -70,7 +76,7 @@ export function LineConfigRow({
   }
 
   return (
-    <tr className="border-b border-border last:border-0">
+    <tr className={`border-b border-border last:border-0 ${line.is_active ? "" : "bg-surface-muted"}`}>
       <td className="px-3 py-2">
         <Input value={form.line_number} onChange={(e) => setForm({ ...form, line_number: e.target.value })} className="w-24" />
       </td>
@@ -97,7 +103,7 @@ export function LineConfigRow({
           ))}
         </Select>
       </td>
-      <td className="px-3 py-2">{form.is_active ? <Badge tone="success">Hoạt động</Badge> : <Badge tone="default">Đã ẩn</Badge>}</td>
+      <td className="px-3 py-2">{line.is_active ? <Badge tone="success">Hoạt động</Badge> : <Badge tone="warning">Đã ẩn</Badge>}</td>
       <td className="px-3 py-2 text-right">
         <div className="flex items-center justify-end gap-1.5">
           {error ? <span className="text-xs text-danger">{error}</span> : null}
@@ -106,9 +112,15 @@ export function LineConfigRow({
               <Check size={14} /> Lưu
             </Button>
           ) : null}
-          <Button size="sm" variant="ghost" onClick={deactivate} title="Ẩn line">
-            <Trash2 size={14} className="text-danger" />
-          </Button>
+          {line.is_active ? (
+            <Button size="sm" variant="ghost" onClick={deactivate} title="Ẩn line">
+              <Trash2 size={14} className="text-danger" />
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={reactivate} title="Hiện lại line">
+              <Eye size={14} /> Bỏ ẩn
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={deletePermanently} title="Xóa hẳn line (không thể khôi phục)">
             <Trash size={14} className="text-danger" />
           </Button>

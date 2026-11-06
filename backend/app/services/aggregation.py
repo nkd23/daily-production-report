@@ -50,10 +50,11 @@ def _shift_weighted_avg(pairs: list[tuple[float | None, float | None]]) -> float
 
 
 def active_lines(db: Session) -> list[Line]:
+    """By PU, then line number. Reports group lines by Executive in the order
+    they first appear, so this also puts each PU's Executive groups in the
+    order of their lowest line (the group with lines 2, 3, 4 before 9, 10)."""
     return list(
-        db.scalars(
-            select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.executive_name, Line.line_number)  # noqa: E712
-        ).all()
+        db.scalars(select(Line).where(Line.is_active == True).order_by(Line.pu_group, Line.line_number)).all()  # noqa: E712
     )
 
 
