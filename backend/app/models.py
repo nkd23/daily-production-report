@@ -256,9 +256,8 @@ class ProgressOrder(Base):
 
 
 class ProgressNote(Base):
-    """What people add to an order on the web: EX/FIN REMARK. (is_closed /
-    closed_by / closed_at belonged to a "Đóng đơn" button that was removed -
-    the page now shows every running order; they are no longer read.)
+    """What people add to an order on the web: EX/FIN REMARK and "Đóng đơn"
+    (hide a junk row the tracker never cleans up, until reopened).
     Keyed by ProgressOrder.order_key (line|JO|color) rather than a foreign
     key, because the order rows are rebuilt from the trackers every day."""
 

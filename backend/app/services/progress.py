@@ -3,8 +3,10 @@
 PC that syncs the SharePoint folder), replacing the hand-made "daily" file.
 
 An order is shown when its Pack-cut is not 0, or it has a Cut qty but no
-Sew qty yet (is_running_order) - nothing else is hidden. The agent applies
-the same rule to keep the upload small; line name clean-up, which Executive
+Sew qty yet (is_running_order), unless someone closed it by hand ("Đóng
+đơn", kept in ProgressNote) - e.g. junk rows a tracker never cleans up. The
+agent applies the first rule too, to keep the upload small; line name
+clean-up, which Executive
 a line belongs to and the "late" days live here so they can change without
 reinstalling the agent."""
 
@@ -89,6 +91,18 @@ def networkdays_mon_sat(start: date, end: date) -> int:
         if (start + timedelta(days=full_weeks * 7 + i)).weekday() != 6:
             count += 1
     return count
+
+
+def order_carton_today(order_carton: str | None, start_sew: str | None, today: date) -> str | None:
+    """Trackers write "Not yet N" in Order carton - N = working days from
+    Start sew to TODAY() - but the cached value only moves when the owner
+    re-saves the file. Recount N for today so it isn't days out of date."""
+    if not order_carton or not order_carton.strip().lower().startswith("not yet"):
+        return order_carton
+    start = parse_iso(start_sew)
+    if start is None:
+        return order_carton
+    return f"Not yet {networkdays_mon_sat(start, today)}"
 
 
 def late_days(end_sew: str | None, end_pack: str | None, today: date) -> tuple[int | None, str | None]:
@@ -227,17 +241,23 @@ def visible_line_numbers(db: Session, user: User) -> set[str] | None:
     }
 
 
-def build_view(db: Session, user: User, today: date) -> dict:
+def build_view(db: Session, user: User, today: date, include_closed: bool = False) -> dict:
     lines = _line_map(db)
     allowed = visible_line_numbers(db, user)
     notes = {n.order_key: n for n in db.scalars(select(ProgressNote)).all()}
     owners = {s.file_name: s.owner for s in db.scalars(select(ProgressSource)).all()}
 
     orders = []
+    closed_count = 0
     for o in db.scalars(select(ProgressOrder)).all():
         if allowed is not None and o.line_number not in allowed:
             continue
         note = notes.get(o.order_key)
+        is_closed = note is not None and note.is_closed
+        if is_closed:
+            closed_count += 1
+            if not include_closed:
+                continue
         line = lines.get(o.line_number)
         late, late_label = late_days(o.end_sew, o.end_pack, today)
         orders.append(
@@ -254,7 +274,7 @@ def build_view(db: Session, user: User, today: date) -> dict:
                 "product_category": o.product_category,
                 "bpo_date": o.bpo_date,
                 "shipment_plan": o.shipment_plan,
-                "order_carton": o.order_carton,
+                "order_carton": order_carton_today(o.order_carton, o.start_sew, today),
                 "start_sew": o.start_sew,
                 "end_sew": o.end_sew,
                 "end_pack": o.end_pack,
@@ -268,6 +288,9 @@ def build_view(db: Session, user: User, today: date) -> dict:
                 "late_label": late_label,
                 "ex_remark": note.ex_remark if note else None,
                 "fin_remark": note.fin_remark if note else None,
+                "is_closed": is_closed,
+                "closed_by": note.closed_by if is_closed else None,
+                "closed_at": note.closed_at if is_closed else None,
             }
         )
 
@@ -286,6 +309,7 @@ def build_view(db: Session, user: User, today: date) -> dict:
     last_run = max((s.last_attempt_at for s in sources), default=None)
     return {
         "updated_at": last_run,
+        "closed_count": closed_count,
         "sources": [
             {
                 "file_name": s.file_name,
@@ -305,7 +329,7 @@ def build_view(db: Session, user: User, today: date) -> dict:
 
 def can_edit_order(db: Session, user: User, order_key: str) -> bool | None:
     """None if no current order has this key; otherwise whether the user may
-    add remarks to it."""
+    add remarks to / close it."""
     line_numbers = set(
         db.scalars(select(ProgressOrder.line_number).where(ProgressOrder.order_key == order_key)).all()
     )

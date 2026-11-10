@@ -318,6 +318,9 @@ export interface ProgressOrder {
   late_label: string | null;
   ex_remark: string | null;
   fin_remark: string | null;
+  is_closed: boolean;
+  closed_by: string | null;
+  closed_at: string | null;
 }
 
 export interface ProgressSource {
@@ -333,6 +336,7 @@ export interface ProgressSource {
 
 export interface ProgressResponse {
   updated_at: string | null;
+  closed_count: number;
   sources: ProgressSource[];
   orders: ProgressOrder[];
 }
@@ -341,10 +345,14 @@ export interface ProgressNoteUpdate {
   order_key: string;
   ex_remark?: string;
   fin_remark?: string;
+  is_closed?: boolean;
 }
 
 export interface ProgressNote {
   order_key: string;
   ex_remark: string | null;
   fin_remark: string | null;
+  is_closed: boolean;
+  closed_by: string | null;
+  closed_at: string | null;
 }

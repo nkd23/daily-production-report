@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { Archive, ArchiveRestore, Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
@@ -121,7 +121,7 @@ function RemarkCell({
 const TH = "sticky top-0 z-20 whitespace-nowrap border-b border-border bg-surface-muted px-2 py-2 font-medium";
 const TD = "whitespace-nowrap border-b border-border px-2 py-1.5";
 const TH_PLAIN = "whitespace-nowrap px-2 py-2 font-medium";
-const COLUMN_COUNT = 22;
+const COLUMN_COUNT = 23;
 
 // Line, Byr, JO, Màu: fixed widths, and which of them stay frozen. A phone
 // has no room for four frozen columns, so there only Line and JO stay put
@@ -200,6 +200,7 @@ function OrdersTable({
             <th className={TH}>EX remark</th>
             <th className={TH}>FIN remark</th>
             <th className={TH}>Nguồn</th>
+            <th className={TH} />
           </tr>
         </thead>
         <tbody>
@@ -224,7 +225,7 @@ function OrdersTable({
                 </td>
               </tr>
               {orders.map((o, i) => (
-                <tr key={`${o.order_key}|${o.source_owner}|${i}`}>
+                <tr key={`${o.order_key}|${o.source_owner}|${i}`} className={o.is_closed ? "text-muted line-through decoration-muted/50" : ""}>
                   <td {...cell(0)}>
                     <span className="font-semibold">{o.line_number}</span>
                   </td>
@@ -267,6 +268,35 @@ function OrdersTable({
                     <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
                   </td>
                   <td className={`${TD} text-muted`}>{o.source_owner}</td>
+                  <td className={`${TD} text-right no-underline`}>
+                    {o.is_closed ? (
+                      <button
+                        type="button"
+                        onClick={() => void onUpdate(o, { is_closed: false })}
+                        title={`Đóng bởi ${o.closed_by ?? "?"} lúc ${dateTime(o.closed_at)} - bấm để hiện lại`}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-primary hover:bg-primary-soft"
+                      >
+                        <ArchiveRestore size={13} /> Mở lại
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Đóng đơn ${o.jo}${o.color ? ` (${o.color})` : ""} - line ${o.line_number}? Đơn sẽ không hiện nữa, kể cả các ngày sau (mở lại được ở "Hiện đơn đã đóng").`
+                            )
+                          ) {
+                            void onUpdate(o, { is_closed: true });
+                          }
+                        }}
+                        title="Đóng đơn: ẩn đơn rác / đơn đã xong mà bảng tiến độ còn lệch số"
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted hover:bg-danger-soft hover:text-danger"
+                      >
+                        <Archive size={13} /> Đóng
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </Fragment>
@@ -286,36 +316,55 @@ function ProgressContent() {
   const [executive, setExecutive] = useState("");
   const [line, setLine] = useState("");
   const [onlyShort, setOnlyShort] = useState(false);
+  const [includeClosed, setIncludeClosed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showSources, setShowSources] = useState(false);
 
   const load = useCallback(() => {
     api
-      .getProgress()
+      .getProgress(includeClosed)
       .then((d) => {
         setData(d);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Không tải được dữ liệu"));
-  }, []);
+  }, [includeClosed]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const onUpdate = useCallback(async (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => {
-    const note = await api.updateProgressNote({ order_key: order.order_key, ...patch });
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            orders: prev.orders.map((o) =>
-              o.order_key === note.order_key ? { ...o, ex_remark: note.ex_remark, fin_remark: note.fin_remark } : o
-            ),
-          }
-        : prev
-    );
-  }, []);
+  const onUpdate = useCallback(
+    async (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => {
+      let note;
+      try {
+        note = await api.updateProgressNote({ order_key: order.order_key, ...patch });
+      } catch (err) {
+        // Remark cells show their own error; closing has no other feedback.
+        if (patch.is_closed !== undefined) alert(err instanceof ApiError ? err.message : "Không cập nhật được đơn");
+        throw err;
+      }
+      setData((prev) => {
+        if (!prev) return prev;
+        const closedDelta = note.is_closed === order.is_closed ? 0 : note.is_closed ? 1 : -1;
+        const orders = prev.orders.flatMap((o) => {
+          if (o.order_key !== note.order_key) return [o];
+          const updated = {
+            ...o,
+            ex_remark: note.ex_remark,
+            fin_remark: note.fin_remark,
+            is_closed: note.is_closed,
+            closed_by: note.closed_by,
+            closed_at: note.closed_at,
+          };
+          // A closed order leaves the list unless closed orders are shown.
+          return updated.is_closed && !includeClosed ? [] : [updated];
+        });
+        return { ...prev, orders, closed_count: prev.closed_count + closedDelta };
+      });
+    },
+    [includeClosed]
+  );
 
   const executives = useMemo(() => {
     const names: string[] = [];
@@ -502,6 +551,10 @@ function ProgressContent() {
         <label className="flex items-center gap-1.5 text-sm text-muted">
           <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} />
           Chỉ đơn Pack-cut âm
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          <input type="checkbox" checked={includeClosed} onChange={(e) => setIncludeClosed(e.target.checked)} />
+          Hiện đơn đã đóng{data?.closed_count ? ` (${data.closed_count})` : ""}
         </label>
         <span className="ml-auto text-sm text-muted">{data ? `${filtered.length} đơn` : ""}</span>
       </div>

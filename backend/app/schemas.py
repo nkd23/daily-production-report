@@ -423,12 +423,16 @@ class ProgressNoteUpdate(BaseModel):
     order_key: str = Field(min_length=1, max_length=200)
     ex_remark: str | None = Field(default=None, max_length=1000)
     fin_remark: str | None = Field(default=None, max_length=1000)
+    is_closed: bool | None = None
 
 
 class ProgressNoteOut(BaseModel):
     order_key: str
     ex_remark: str | None
     fin_remark: str | None
+    is_closed: bool
+    closed_by: str | None
+    closed_at: datetime | None
 
 
 class ProgressOrderOut(BaseModel):
@@ -458,6 +462,10 @@ class ProgressOrderOut(BaseModel):
     late_label: str | None
     ex_remark: str | None
     fin_remark: str | None
+    # Closed by hand ("Đóng đơn"); only returned when closed orders are asked for.
+    is_closed: bool
+    closed_by: str | None
+    closed_at: datetime | None
 
 
 class ProgressSourceOut(BaseModel):
@@ -473,5 +481,6 @@ class ProgressSourceOut(BaseModel):
 
 class ProgressResponse(BaseModel):
     updated_at: datetime | None
+    closed_count: int
     sources: list[ProgressSourceOut]
     orders: list[ProgressOrderOut]

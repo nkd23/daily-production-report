@@ -130,7 +130,8 @@ export const api = {
 
   dashboardWeekly: (weekOf: string) => request<WeeklyResponse>(`/api/dashboard/weekly?week_of=${weekOf}`),
 
-  getProgress: () => request<ProgressResponse>("/api/progress"),
+  getProgress: (includeClosed = false) =>
+    request<ProgressResponse>(`/api/progress${includeClosed ? "?include_closed=true" : ""}`),
   updateProgressNote: (payload: ProgressNoteUpdate) =>
     request<ProgressNote>("/api/progress/notes", { method: "PUT", body: JSON.stringify(payload) }),
 
