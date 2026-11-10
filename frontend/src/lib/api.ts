@@ -7,6 +7,7 @@ import type {
   LineWithReport,
   ProgressNote,
   ProgressNoteUpdate,
+  ProgressQtyField,
   ProgressResponse,
   ReportHistoryEntry,
   User,
@@ -132,6 +133,8 @@ export const api = {
 
   getProgress: (includeClosed = false) =>
     request<ProgressResponse>(`/api/progress${includeClosed ? "?include_closed=true" : ""}`),
+  setProgressNumber: (payload: { order_key: string; field: ProgressQtyField; value: number | null }) =>
+    request<void>("/api/progress/numbers", { method: "PUT", body: JSON.stringify(payload) }),
   updateProgressNote: (payload: ProgressNoteUpdate) =>
     request<ProgressNote>("/api/progress/notes", { method: "PUT", body: JSON.stringify(payload) }),
 

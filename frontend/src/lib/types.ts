@@ -290,6 +290,13 @@ export interface ReportHistoryEntry {
 }
 
 // ---------- Tiến độ đơn hàng ----------
+export type ProgressQtyField = "order_qty" | "allocate_qty" | "cut_qty" | "sew_qty" | "pack_qty";
+
+export interface ProgressEdit {
+  original: number | null;
+  set_by: string | null;
+  set_at: string;
+}
 
 export interface ProgressOrder {
   order_key: string;
@@ -314,6 +321,8 @@ export interface ProgressOrder {
   sew_qty: number | null;
   pack_qty: number | null;
   pack_cut: number;
+  /** Quantities a Manager corrected: field -> the tracker's own number. */
+  edited: Partial<Record<ProgressQtyField, ProgressEdit>>;
   late: number | null;
   late_label: string | null;
   ex_remark: string | null;
@@ -337,6 +346,7 @@ export interface ProgressSource {
 export interface ProgressResponse {
   updated_at: string | null;
   closed_count: number;
+  can_edit_numbers: boolean;
   sources: ProgressSource[];
   orders: ProgressOrder[];
 }

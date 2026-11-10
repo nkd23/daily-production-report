@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -435,6 +436,21 @@ class ProgressNoteOut(BaseModel):
     closed_at: datetime | None
 
 
+class ProgressNumberUpdate(BaseModel):
+    """Manager correction of one quantity; value=None goes back to the
+    tracker's number."""
+
+    order_key: str = Field(min_length=1, max_length=200)
+    field: Literal["order_qty", "allocate_qty", "cut_qty", "sew_qty", "pack_qty"]
+    value: int | None = Field(default=None, ge=0, le=10_000_000)
+
+
+class ProgressEditOut(BaseModel):
+    original: int | None
+    set_by: str | None
+    set_at: datetime
+
+
 class ProgressOrderOut(BaseModel):
     order_key: str
     line_number: str
@@ -458,6 +474,8 @@ class ProgressOrderOut(BaseModel):
     sew_qty: int | None
     pack_qty: int | None
     pack_cut: int
+    # Quantities a Manager corrected: field -> the tracker's own number.
+    edited: dict[str, ProgressEditOut]
     late: int | None
     late_label: str | None
     ex_remark: str | None
@@ -482,5 +500,6 @@ class ProgressSourceOut(BaseModel):
 class ProgressResponse(BaseModel):
     updated_at: datetime | None
     closed_count: int
+    can_edit_numbers: bool
     sources: list[ProgressSourceOut]
     orders: list[ProgressOrderOut]

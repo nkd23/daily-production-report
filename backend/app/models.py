@@ -272,3 +272,23 @@ class ProgressNote(Base):
     closed_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     updated_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
+
+
+class ProgressOverride(Base):
+    """A Manager's correction to one quantity (order/allocate/cut/sew/pack)
+    of a Tiến độ order, for when a tracker has it wrong. base_value is what
+    the tracker said when the correction was made: the correction applies
+    only while the tracker still says that, so once the owner fixes the
+    Excel file the tracker's new number wins and the correction is dropped
+    (app.services.progress)."""
+
+    __tablename__ = "progress_overrides"
+    __table_args__ = (UniqueConstraint("order_key", "field", name="uq_progress_override_key_field"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_key: Mapped[str] = mapped_column(Unicode(200), nullable=False)
+    field: Mapped[str] = mapped_column(Unicode(20), nullable=False)
+    value: Mapped[int] = mapped_column(Integer, nullable=False)
+    base_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    set_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    set_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)

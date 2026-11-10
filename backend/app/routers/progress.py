@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import local_now, local_today, require_dashboard_viewer
+from app.deps import local_now, local_today, require_dashboard_viewer, require_sep_only
 from app.models import ProgressNote, User
-from app.schemas import ProgressIngest, ProgressNoteOut, ProgressNoteUpdate, ProgressResponse
-from app.services.progress import build_view, can_edit_order, ingest
+from app.schemas import ProgressIngest, ProgressNoteOut, ProgressNoteUpdate, ProgressNumberUpdate, ProgressResponse
+from app.services.progress import build_view, can_edit_order, ingest, set_override
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 settings = get_settings()
@@ -82,6 +82,18 @@ def update_note(
         closed_by=note.closed_by,
         closed_at=note.closed_at,
     )
+
+
+@router.put("/numbers", status_code=status.HTTP_204_NO_CONTENT)
+def update_number(
+    payload: ProgressNumberUpdate,
+    current_user: User = Depends(require_sep_only),
+    db: Session = Depends(get_db),
+):
+    """Manager-only correction of a quantity the tracker has wrong."""
+    if not set_override(db, current_user, payload.order_key, payload.field, payload.value, local_now().replace(tzinfo=None)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Đơn này không còn trong bảng tiến độ")
+    db.commit()
 
 
 @router.get("/excel")

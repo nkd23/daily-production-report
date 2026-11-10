@@ -12,12 +12,13 @@ reinstalling the agent."""
 
 import re
 import unicodedata
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from app.models import Line, ProgressNote, ProgressOrder, ProgressSource, User, UserRole
+from app.models import Line, ProgressNote, ProgressOrder, ProgressOverride, ProgressSource, User, UserRole
 
 # Remarks for orders no tracker has listed for this long are
 # deleted, so the table doesn't grow forever.
@@ -224,7 +225,69 @@ def ingest(db: Session, payload, now: datetime) -> dict:
         .where(ProgressNote.updated_at < now - timedelta(days=NOTE_RETENTION_DAYS))
         .where(ProgressNote.order_key.not_in(live_keys))
     )
+    _drop_outdated_overrides(db)
     return {"sources": len(payload.sources), "rows": inserted}
+
+
+def _drop_outdated_overrides(db: Session) -> None:
+    """A Manager's correction stands only while the tracker still has the
+    number it corrected; once the tracker changes (or the order is gone),
+    the tracker's number wins."""
+    db.flush()
+    overrides = db.scalars(select(ProgressOverride)).all()
+    if not overrides:
+        return
+    current: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
+    keys = list({ov.order_key for ov in overrides})
+    for row in db.scalars(select(ProgressOrder).where(ProgressOrder.order_key.in_(keys))).all():
+        for field in ORDER_INT_FIELDS:
+            current[row.order_key][field].add(getattr(row, field))
+    for ov in overrides:
+        if ov.base_value not in current[ov.order_key][ov.field]:
+            db.delete(ov)
+
+
+def effective_quantities(order: ProgressOrder, overrides: dict[str, ProgressOverride]) -> tuple[dict, int, dict]:
+    """Quantities after Manager corrections, the matching Pack-cut, and which
+    fields were corrected. Pack-cut moves by the same amount Pack and Cut
+    were corrected by, so the tracker's other terms (sample, pull-out,
+    grades...) are kept."""
+    values = {field: getattr(order, field) for field in ORDER_INT_FIELDS}
+    edited = {}
+    for field, ov in overrides.items():
+        if ov.base_value == values[field]:
+            edited[field] = {"original": values[field], "set_by": ov.set_by, "set_at": ov.set_at}
+            values[field] = ov.value
+    pack_cut = (
+        order.pack_cut
+        + ((values["pack_qty"] or 0) - (order.pack_qty or 0))
+        - ((values["cut_qty"] or 0) - (order.cut_qty or 0))
+    )
+    return values, pack_cut, edited
+
+
+def set_override(db: Session, user: User, order_key: str, field: str, value: int | None, now: datetime) -> bool:
+    """Correct one quantity (value=None or the tracker's own number removes
+    the correction). False if no current order has this key."""
+    order = db.scalar(select(ProgressOrder).where(ProgressOrder.order_key == order_key).limit(1))
+    if order is None:
+        return False
+    base = getattr(order, field)
+    ov = db.scalar(
+        select(ProgressOverride).where(ProgressOverride.order_key == order_key, ProgressOverride.field == field)
+    )
+    if value is None or value == base:
+        if ov is not None:
+            db.delete(ov)
+        return True
+    if ov is None:
+        ov = ProgressOverride(order_key=order_key, field=field)
+        db.add(ov)
+    ov.value = value
+    ov.base_value = base
+    ov.set_by = user.full_name
+    ov.set_at = now
+    return True
 
 
 def _line_map(db: Session) -> dict[str, Line]:
@@ -245,6 +308,9 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
     lines = _line_map(db)
     allowed = visible_line_numbers(db, user)
     notes = {n.order_key: n for n in db.scalars(select(ProgressNote)).all()}
+    overrides: dict[str, dict[str, ProgressOverride]] = defaultdict(dict)
+    for ov in db.scalars(select(ProgressOverride)).all():
+        overrides[ov.order_key][ov.field] = ov
     owners = {s.file_name: s.owner for s in db.scalars(select(ProgressSource)).all()}
 
     orders = []
@@ -260,6 +326,7 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
                 continue
         line = lines.get(o.line_number)
         late, late_label = late_days(o.end_sew, o.end_pack, today)
+        qty, pack_cut, edited = effective_quantities(o, overrides.get(o.order_key, {}))
         orders.append(
             {
                 "order_key": o.order_key,
@@ -278,12 +345,9 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
                 "start_sew": o.start_sew,
                 "end_sew": o.end_sew,
                 "end_pack": o.end_pack,
-                "order_qty": o.order_qty,
-                "allocate_qty": o.allocate_qty,
-                "cut_qty": o.cut_qty,
-                "sew_qty": o.sew_qty,
-                "pack_qty": o.pack_qty,
-                "pack_cut": o.pack_cut,
+                **qty,
+                "pack_cut": pack_cut,
+                "edited": edited,
                 "late": late,
                 "late_label": late_label,
                 "ex_remark": note.ex_remark if note else None,
@@ -310,6 +374,7 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
     return {
         "updated_at": last_run,
         "closed_count": closed_count,
+        "can_edit_numbers": user.role == UserRole.sep,
         "sources": [
             {
                 "file_name": s.file_name,

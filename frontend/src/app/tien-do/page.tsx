@@ -8,7 +8,7 @@ import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { execColor } from "@/lib/exec-colors";
-import type { ProgressNoteUpdate, ProgressOrder, ProgressResponse } from "@/lib/types";
+import type { ProgressNoteUpdate, ProgressOrder, ProgressQtyField, ProgressResponse } from "@/lib/types";
 
 const UNASSIGNED = "Chưa phân Executive";
 
@@ -115,6 +115,109 @@ function RemarkCell({
   );
 }
 
+type NumberSave = (order: ProgressOrder, field: ProgressQtyField, value: number | null) => Promise<void>;
+
+/** A quantity cell. Managers can click to correct it; a corrected number is
+ * tinted, with the tracker's own number in the tooltip. */
+function NumberCell({
+  order,
+  field,
+  canEdit,
+  onSave,
+}: {
+  order: ProgressOrder;
+  field: ProgressQtyField;
+  canEdit: boolean;
+  onSave: NumberSave;
+}) {
+  const value = order[field];
+  const edit = order.edited?.[field];
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const cancelled = useRef(false);
+
+  const tip = edit
+    ? `Đã sửa tay bởi ${edit.set_by ?? "?"} lúc ${dateTime(edit.set_at)}. Bảng tiến độ ghi: ${
+        edit.original == null ? "(trống)" : num(edit.original)
+      }.${canEdit ? " Bấm để sửa; xoá trống để trả về số của bảng tiến độ." : ""}`
+    : canEdit
+      ? "Bấm để sửa số"
+      : undefined;
+
+  async function commit() {
+    if (cancelled.current) {
+      cancelled.current = false;
+      setEditing(false);
+      return;
+    }
+    const text = draft.replace(/[.,\s]/g, "");
+    if (text !== "" && !/^\d+$/.test(text)) {
+      alert("Chỉ nhập số nguyên không âm.");
+      return;
+    }
+    const next = text === "" ? null : Number(text);
+    // Empty on a corrected cell = back to the tracker's number.
+    if (next === value && !(next === null && edit)) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(order, field, next);
+      setEditing(false);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Không lưu được số");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const tint = edit ? "bg-warning-soft font-semibold text-warning" : "";
+  if (editing) {
+    return (
+      <td className="border-b border-border px-1 py-1 text-right">
+        <input
+          autoFocus
+          inputMode="numeric"
+          value={draft}
+          disabled={saving}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") {
+              cancelled.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-20 rounded border border-primary bg-surface px-1.5 py-0.5 text-right text-xs tabular-nums outline-none ring-2 ring-primary/20"
+        />
+      </td>
+    );
+  }
+  return (
+    <td className={`${TD} text-right tabular-nums ${tint}`} title={tip}>
+      {canEdit ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(value == null ? "" : String(value));
+            setEditing(true);
+          }}
+          className="-mx-1 min-w-[2.5rem] rounded px-1 text-right hover:bg-primary-soft/60"
+        >
+          {value == null ? <span className="text-muted/50">-</span> : num(value)}
+        </button>
+      ) : (
+        num(value)
+      )}
+    </td>
+  );
+}
+
+const QTY_FIELDS: ProgressQtyField[] = ["order_qty", "allocate_qty", "cut_qty", "sew_qty", "pack_qty"];
+
 // Header row and the Line / Byr / JO / Màu columns stay put while the table
 // scrolls (like Excel's freeze panes). border-separate (set on the table) so
 // the borders of those sticky cells move with them.
@@ -158,9 +261,13 @@ function frozenProps(layout: FrozenLayout, i: number, header: boolean) {
 function OrdersTable({
   groups,
   onUpdate,
+  canEditNumbers,
+  onNumber,
 }: {
   groups: [string, ProgressOrder[]][];
   onUpdate: (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => Promise<void>;
+  canEditNumbers: boolean;
+  onNumber: NumberSave;
 }) {
   const layout = useCompact() ? COMPACT : WIDE;
   const cell = (i: number, header = false) => {
@@ -246,15 +353,14 @@ function OrdersTable({
                   <td className={TD}>{shortDate(o.start_sew)}</td>
                   <td className={TD}>{shortDate(o.end_sew)}</td>
                   <td className={TD}>{shortDate(o.end_pack)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{num(o.order_qty)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{num(o.allocate_qty)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{num(o.cut_qty)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{num(o.sew_qty)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{num(o.pack_qty)}</td>
+                  {QTY_FIELDS.map((field) => (
+                    <NumberCell key={field} order={o} field={field} canEdit={canEditNumbers} onSave={onNumber} />
+                  ))}
                   <td
                     className={`${TD} text-right font-semibold tabular-nums ${
                       o.pack_cut < 0 ? "text-danger" : o.pack_cut > 0 ? "text-success" : "text-muted"
-                    }`}
+                    } ${o.edited?.pack_qty || o.edited?.cut_qty ? "bg-warning-soft" : ""}`}
+                    title={o.edited?.pack_qty || o.edited?.cut_qty ? "Tính lại theo số Pack/Cut đã sửa tay" : undefined}
                   >
                     {num(o.pack_cut)}
                   </td>
@@ -364,6 +470,15 @@ function ProgressContent() {
       });
     },
     [includeClosed]
+  );
+
+  const onNumber = useCallback<NumberSave>(
+    async (order, field, value) => {
+      await api.setProgressNumber({ order_key: order.order_key, field, value });
+      // Pack-cut is recomputed on the server - fetch the corrected rows.
+      load();
+    },
+    [load]
   );
 
   const executives = useMemo(() => {
@@ -571,7 +686,12 @@ function ProgressContent() {
 
       {groups.length ? (
         <Card className="overflow-hidden p-0">
-          <OrdersTable groups={groups} onUpdate={onUpdate} />
+          <OrdersTable
+            groups={groups}
+            onUpdate={onUpdate}
+            canEditNumbers={data?.can_edit_numbers ?? false}
+            onNumber={onNumber}
+          />
         </Card>
       ) : null}
     </PageShell>
