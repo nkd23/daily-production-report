@@ -290,7 +290,6 @@ export interface ReportHistoryEntry {
 }
 
 // ---------- Tiến độ đơn hàng ----------
-export type ProgressHiddenReason = "closed" | "shipped" | "done";
 
 export interface ProgressOrder {
   order_key: string;
@@ -319,9 +318,6 @@ export interface ProgressOrder {
   late_label: string | null;
   ex_remark: string | null;
   fin_remark: string | null;
-  hidden_reason: ProgressHiddenReason | null;
-  closed_by: string | null;
-  closed_at: string | null;
 }
 
 export interface ProgressSource {
@@ -337,8 +333,6 @@ export interface ProgressSource {
 
 export interface ProgressResponse {
   updated_at: string | null;
-  shipment_grace_days: number;
-  hidden_counts: Record<ProgressHiddenReason, number>;
   sources: ProgressSource[];
   orders: ProgressOrder[];
 }
@@ -347,14 +341,10 @@ export interface ProgressNoteUpdate {
   order_key: string;
   ex_remark?: string;
   fin_remark?: string;
-  is_closed?: boolean;
 }
 
 export interface ProgressNote {
   order_key: string;
   ex_remark: string | null;
   fin_remark: string | null;
-  is_closed: boolean;
-  closed_by: string | null;
-  closed_at: string | null;
 }

@@ -1,8 +1,8 @@
 """Đẩy bảng tiến độ lên web - chạy trên máy văn phòng lúc 9:30 mỗi sáng.
 
 Đọc mọi file "bảng tiến độ" (.xlsx/.xlsm) trong thư mục SharePoint đã đồng
-bộ về máy bằng OneDrive, giữ các dòng có Pack-cut khác 0, tra WF và Cust.
-Style No trong file THV PRODUCTION PLAN mới nhất, rồi gửi lên web
+bộ về máy bằng OneDrive, giữ các dòng có Pack-cut khác 0 hoặc đã có Cut mà
+chưa có Sew, tra WF và Cust. Style No trong file THV PRODUCTION PLAN mới nhất, rồi gửi lên web
 (POST /api/progress/ingest). Cài đặt nằm trong config.ini cạnh file .exe.
 
     DayTienDo.exe          chạy bình thường (đọc + gửi)
@@ -23,7 +23,7 @@ from datetime import date, datetime
 
 import openpyxl
 
-VERSION = "1.0"
+VERSION = "1.1"
 TRACKER_SHEET = "bảng tiến độ"
 PLAN_SHEET = "Plan"
 
@@ -201,7 +201,11 @@ def read_tracker(path: str, plan: dict) -> list[dict]:
             if not jo:
                 continue
             pack_cut = _number(cell(cols["pack_cut"]))
-            if pack_cut is None or pack_cut == 0:
+            cut = _number(cell(cols["cut_qty"])) if "cut_qty" in cols else None
+            sew = _number(cell(cols["sew_qty"])) if "sew_qty" in cols else None
+            # Same rule as is_running_order on the web: Pack-cut khác 0, or
+            # cut has started but nothing is sewn yet.
+            if not pack_cut and not (cut and cut > 0 and not sew):
                 continue
             item = {}
             for field, i in cols.items():

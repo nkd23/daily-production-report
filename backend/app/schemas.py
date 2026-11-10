@@ -423,16 +423,12 @@ class ProgressNoteUpdate(BaseModel):
     order_key: str = Field(min_length=1, max_length=200)
     ex_remark: str | None = Field(default=None, max_length=1000)
     fin_remark: str | None = Field(default=None, max_length=1000)
-    is_closed: bool | None = None
 
 
 class ProgressNoteOut(BaseModel):
     order_key: str
     ex_remark: str | None
     fin_remark: str | None
-    is_closed: bool
-    closed_by: str | None
-    closed_at: datetime | None
 
 
 class ProgressOrderOut(BaseModel):
@@ -462,11 +458,6 @@ class ProgressOrderOut(BaseModel):
     late_label: str | None
     ex_remark: str | None
     fin_remark: str | None
-    # None = showing normally; "closed" (Đóng đơn), "shipped" (Shipment plan
-    # past the grace days) or "done" (tracker says shipped) when hidden.
-    hidden_reason: str | None
-    closed_by: str | None
-    closed_at: datetime | None
 
 
 class ProgressSourceOut(BaseModel):
@@ -482,7 +473,5 @@ class ProgressSourceOut(BaseModel):
 
 class ProgressResponse(BaseModel):
     updated_at: datetime | None
-    shipment_grace_days: int
-    hidden_counts: dict[str, int]
     sources: list[ProgressSourceOut]
     orders: list[ProgressOrderOut]

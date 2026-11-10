@@ -2,10 +2,11 @@
 "bảng tiến độ" Excel trackers (by the agent in progress-agent/ on an office
 PC that syncs the SharePoint folder), replacing the hand-made "daily" file.
 
-The agent only reads the files and keeps rows whose Pack-cut is not 0; the
-rules that decide what people see - line name clean-up, which Executive a
-line belongs to, the "late" days and which orders are hidden - live here so
-they can change without reinstalling the agent."""
+An order is shown when its Pack-cut is not 0, or it has a Cut qty but no
+Sew qty yet (is_running_order) - nothing else is hidden. The agent applies
+the same rule to keep the upload small; line name clean-up, which Executive
+a line belongs to and the "late" days live here so they can change without
+reinstalling the agent."""
 
 import re
 import unicodedata
@@ -16,11 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Line, ProgressNote, ProgressOrder, ProgressSource, User, UserRole
 
-# An order drops off the page once its Shipment plan is more than this many
-# days in the past, or the tracker marks the shipment "Done". Anything still
-# showing after that can be hidden by hand with "Đóng đơn".
-SHIPMENT_GRACE_DAYS = 7
-# Remarks/closed flags for orders no tracker has listed for this long are
+# Remarks for orders no tracker has listed for this long are
 # deleted, so the table doesn't grow forever.
 NOTE_RETENTION_DAYS = 60
 
@@ -111,15 +108,9 @@ def late_days(end_sew: str | None, end_pack: str | None, today: date) -> tuple[i
     return networkdays_mon_sat(sew, pack) - 1, None
 
 
-def auto_hidden_reason(shipment_plan: str | None, today: date) -> str | None:
-    if not shipment_plan:
-        return None
-    if shipment_plan.strip().lower().startswith("done"):
-        return "done"
-    ship = parse_iso(shipment_plan)
-    if ship is not None and ship < today - timedelta(days=SHIPMENT_GRACE_DAYS):
-        return "shipped"
-    return None
+def is_running_order(pack_cut: int | None, cut_qty: int | None, sew_qty: int | None) -> bool:
+    """Pack-cut khác 0, or cut has started but nothing is sewn yet."""
+    return bool(pack_cut) or (bool(cut_qty) and cut_qty > 0 and not sew_qty)
 
 
 def _clean_text(value, limit: int) -> str | None:
@@ -169,8 +160,8 @@ def ingest(db: Session, payload, now: datetime) -> dict:
         rows = []
         for r in item.rows:
             jo = _clean_text(r.jo, ORDER_TEXT_LIMITS["jo"])
-            pack_cut = _clean_int(r.pack_cut)
-            if not jo or not r.line or not pack_cut:
+            pack_cut = _clean_int(r.pack_cut) or 0
+            if not jo or not r.line or not is_running_order(pack_cut, _clean_int(r.cut_qty), _clean_int(r.sew_qty)):
                 continue
             line_number = normalize_line(r.line)
             color = _clean_text(r.color, ORDER_TEXT_LIMITS["color"])
@@ -236,23 +227,17 @@ def visible_line_numbers(db: Session, user: User) -> set[str] | None:
     }
 
 
-def build_view(db: Session, user: User, today: date, include_hidden: bool) -> dict:
+def build_view(db: Session, user: User, today: date) -> dict:
     lines = _line_map(db)
     allowed = visible_line_numbers(db, user)
     notes = {n.order_key: n for n in db.scalars(select(ProgressNote)).all()}
     owners = {s.file_name: s.owner for s in db.scalars(select(ProgressSource)).all()}
 
     orders = []
-    hidden = {"closed": 0, "shipped": 0, "done": 0}
     for o in db.scalars(select(ProgressOrder)).all():
         if allowed is not None and o.line_number not in allowed:
             continue
         note = notes.get(o.order_key)
-        reason = "closed" if note is not None and note.is_closed else auto_hidden_reason(o.shipment_plan, today)
-        if reason:
-            hidden[reason] += 1
-            if not include_hidden:
-                continue
         line = lines.get(o.line_number)
         late, late_label = late_days(o.end_sew, o.end_pack, today)
         orders.append(
@@ -283,9 +268,6 @@ def build_view(db: Session, user: User, today: date, include_hidden: bool) -> di
                 "late_label": late_label,
                 "ex_remark": note.ex_remark if note else None,
                 "fin_remark": note.fin_remark if note else None,
-                "hidden_reason": reason,
-                "closed_by": note.closed_by if note and note.is_closed else None,
-                "closed_at": note.closed_at if note and note.is_closed else None,
             }
         )
 
@@ -304,8 +286,6 @@ def build_view(db: Session, user: User, today: date, include_hidden: bool) -> di
     last_run = max((s.last_attempt_at for s in sources), default=None)
     return {
         "updated_at": last_run,
-        "shipment_grace_days": SHIPMENT_GRACE_DAYS,
-        "hidden_counts": hidden,
         "sources": [
             {
                 "file_name": s.file_name,
@@ -325,7 +305,7 @@ def build_view(db: Session, user: User, today: date, include_hidden: bool) -> di
 
 def can_edit_order(db: Session, user: User, order_key: str) -> bool | None:
     """None if no current order has this key; otherwise whether the user may
-    add remarks to / close it."""
+    add remarks to it."""
     line_numbers = set(
         db.scalars(select(ProgressOrder.line_number).where(ProgressOrder.order_key == order_key)).all()
     )

@@ -130,14 +130,13 @@ export const api = {
 
   dashboardWeekly: (weekOf: string) => request<WeeklyResponse>(`/api/dashboard/weekly?week_of=${weekOf}`),
 
-  getProgress: (includeHidden = false) =>
-    request<ProgressResponse>(`/api/progress${includeHidden ? "?include_hidden=true" : ""}`),
+  getProgress: () => request<ProgressResponse>("/api/progress"),
   updateProgressNote: (payload: ProgressNoteUpdate) =>
     request<ProgressNote>("/api/progress/notes", { method: "PUT", body: JSON.stringify(payload) }),
 
-  async downloadProgressExcel(includeHidden = false) {
+  async downloadProgressExcel() {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/progress/excel${includeHidden ? "?include_hidden=true" : ""}`, {
+    const res = await fetch(`${API_URL}/api/progress/excel`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw new ApiError(res.status, "Không xuất được file Excel");

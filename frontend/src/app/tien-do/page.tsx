@@ -1,22 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
+import { Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { execColor } from "@/lib/exec-colors";
-import type { ProgressHiddenReason, ProgressNoteUpdate, ProgressOrder, ProgressResponse } from "@/lib/types";
+import type { ProgressNoteUpdate, ProgressOrder, ProgressResponse } from "@/lib/types";
 
 const UNASSIGNED = "Chưa phân Executive";
-
-const HIDDEN_LABEL: Record<ProgressHiddenReason, string> = {
-  closed: "Đã đóng",
-  shipped: "Quá shipment",
-  done: "Shipment Done",
-};
 
 function todayISO() {
   return new Date().toLocaleDateString("sv-SE");
@@ -152,81 +146,45 @@ function OrdersTable({
             <th className={TH}>EX remark</th>
             <th className={TH}>FIN remark</th>
             <th className={TH}>Nguồn</th>
-            <th className={TH} />
           </tr>
         </thead>
         <tbody>
-          {orders.map((o, i) => {
-            const hidden = o.hidden_reason;
-            return (
-              <tr
-                key={`${o.order_key}|${o.source_owner}|${i}`}
-                className={`border-b border-border last:border-0 ${hidden ? "bg-surface-muted/70 text-muted" : "hover:bg-primary-soft/20"}`}
-              >
-                <td className={`${TD} sticky left-0 z-10 font-semibold ${hidden ? "bg-surface-muted" : "bg-surface"}`}>
-                  {o.line_number}
-                </td>
-                <td className={TD}>{o.buyer}</td>
-                <td className={`${TD} font-medium`}>{o.jo}</td>
-                <td className={`${TD} max-w-[8rem] truncate`} title={o.color ?? undefined}>
-                  {o.color}
-                </td>
-                <td className={TD}>{o.cust_style_no}</td>
-                <td className={TD}>{o.product_category}</td>
-                <td className={TD}>{shortDate(o.bpo_date)}</td>
-                <td className={`${TD} font-medium`}>{shortDate(o.shipment_plan)}</td>
-                <td className={TD}>{shortDate(o.order_carton)}</td>
-                <td className={TD}>{shortDate(o.start_sew)}</td>
-                <td className={TD}>{shortDate(o.end_sew)}</td>
-                <td className={TD}>{shortDate(o.end_pack)}</td>
-                <td className={`${TD} text-right tabular-nums`}>{num(o.order_qty)}</td>
-                <td className={`${TD} text-right tabular-nums`}>{num(o.allocate_qty)}</td>
-                <td className={`${TD} text-right tabular-nums`}>{num(o.cut_qty)}</td>
-                <td className={`${TD} text-right tabular-nums`}>{num(o.sew_qty)}</td>
-                <td className={`${TD} text-right tabular-nums`}>{num(o.pack_qty)}</td>
-                <td className={`${TD} text-right font-semibold tabular-nums ${o.pack_cut < 0 ? "text-danger" : "text-success"}`}>
-                  {num(o.pack_cut)}
-                </td>
-                <td className={`${TD} text-right tabular-nums`}>
-                  {o.late != null ? o.late : <span className="text-muted">{o.late_label}</span>}
-                </td>
-                <td className="px-1 py-1">
-                  <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
-                </td>
-                <td className="px-1 py-1">
-                  <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
-                </td>
-                <td className={`${TD} text-muted`}>{o.source_owner}</td>
-                <td className={`${TD} text-right`}>
-                  {hidden === "closed" ? (
-                    <button
-                      type="button"
-                      onClick={() => onUpdate(o, { is_closed: false })}
-                      title={`Đóng bởi ${o.closed_by ?? "?"} lúc ${dateTime(o.closed_at)} - bấm để hiện lại`}
-                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-primary hover:bg-primary-soft"
-                    >
-                      <ArchiveRestore size={13} /> Mở lại
-                    </button>
-                  ) : hidden ? (
-                    <Badge>{HIDDEN_LABEL[hidden]}</Badge>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Đóng đơn ${o.jo}${o.color ? ` (${o.color})` : ""} - line ${o.line_number}? Đơn sẽ không hiện ở đây nữa, kể cả các ngày sau.`)) {
-                          void onUpdate(o, { is_closed: true });
-                        }
-                      }}
-                      title="Đóng đơn: ẩn hẳn đơn này khỏi trang (vd. đơn đã xong nhưng bảng tiến độ còn lệch số)"
-                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted hover:bg-danger-soft hover:text-danger"
-                    >
-                      <Archive size={13} /> Đóng
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {orders.map((o, i) => (
+            <tr key={`${o.order_key}|${o.source_owner}|${i}`} className="border-b border-border last:border-0 hover:bg-primary-soft/20">
+              <td className={`${TD} sticky left-0 z-10 bg-surface font-semibold`}>{o.line_number}</td>
+              <td className={TD}>{o.buyer}</td>
+              <td className={`${TD} font-medium`}>{o.jo}</td>
+              <td className={`${TD} max-w-[8rem] truncate`} title={o.color ?? undefined}>
+                {o.color}
+              </td>
+              <td className={TD}>{o.cust_style_no}</td>
+              <td className={TD}>{o.product_category}</td>
+              <td className={TD}>{shortDate(o.bpo_date)}</td>
+              <td className={`${TD} font-medium`}>{shortDate(o.shipment_plan)}</td>
+              <td className={TD}>{shortDate(o.order_carton)}</td>
+              <td className={TD}>{shortDate(o.start_sew)}</td>
+              <td className={TD}>{shortDate(o.end_sew)}</td>
+              <td className={TD}>{shortDate(o.end_pack)}</td>
+              <td className={`${TD} text-right tabular-nums`}>{num(o.order_qty)}</td>
+              <td className={`${TD} text-right tabular-nums`}>{num(o.allocate_qty)}</td>
+              <td className={`${TD} text-right tabular-nums`}>{num(o.cut_qty)}</td>
+              <td className={`${TD} text-right tabular-nums`}>{num(o.sew_qty)}</td>
+              <td className={`${TD} text-right tabular-nums`}>{num(o.pack_qty)}</td>
+              <td className={`${TD} text-right font-semibold tabular-nums ${o.pack_cut < 0 ? "text-danger" : o.pack_cut > 0 ? "text-success" : "text-muted"}`}>
+                {num(o.pack_cut)}
+              </td>
+              <td className={`${TD} text-right tabular-nums`}>
+                {o.late != null ? o.late : <span className="text-muted">{o.late_label}</span>}
+              </td>
+              <td className="px-1 py-1">
+                <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
+              </td>
+              <td className="px-1 py-1">
+                <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
+              </td>
+              <td className={`${TD} text-muted`}>{o.source_owner}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -238,7 +196,6 @@ function ProgressContent() {
   const isExecutive = user?.role === "executive";
   const [data, setData] = useState<ProgressResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [includeHidden, setIncludeHidden] = useState(false);
   const [search, setSearch] = useState("");
   const [executive, setExecutive] = useState("");
   const [line, setLine] = useState("");
@@ -248,48 +205,31 @@ function ProgressContent() {
 
   const load = useCallback(() => {
     api
-      .getProgress(includeHidden)
+      .getProgress()
       .then((d) => {
         setData(d);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Không tải được dữ liệu"));
-  }, [includeHidden]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const onUpdate = useCallback(async (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => {
-    try {
-      const note = await api.updateProgressNote({ order_key: order.order_key, ...patch });
-      setData((prev) => {
-        if (!prev) return prev;
-        let { hidden_counts } = prev;
-        if (patch.is_closed !== undefined) {
-          const delta = note.is_closed ? 1 : -1;
-          hidden_counts = { ...hidden_counts, closed: hidden_counts.closed + delta };
-        }
-        const orders = prev.orders.flatMap((o) => {
-          if (o.order_key !== note.order_key) return [o];
-          const updated: ProgressOrder = {
-            ...o,
-            ex_remark: note.ex_remark,
-            fin_remark: note.fin_remark,
-            closed_by: note.closed_by,
-            closed_at: note.closed_at,
-            hidden_reason: note.is_closed ? "closed" : o.hidden_reason === "closed" ? null : o.hidden_reason,
-          };
-          // A closed order leaves the list unless hidden orders are shown.
-          return updated.hidden_reason && !includeHidden ? [] : [updated];
-        });
-        return { ...prev, orders, hidden_counts };
-      });
-    } catch (err) {
-      if (patch.is_closed !== undefined) alert(err instanceof ApiError ? err.message : "Không cập nhật được đơn");
-      throw err;
-    }
-  }, [includeHidden]);
+    const note = await api.updateProgressNote({ order_key: order.order_key, ...patch });
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            orders: prev.orders.map((o) =>
+              o.order_key === note.order_key ? { ...o, ex_remark: note.ex_remark, fin_remark: note.fin_remark } : o
+            ),
+          }
+        : prev
+    );
+  }, []);
 
   const executives = useMemo(() => {
     const names: string[] = [];
@@ -333,7 +273,7 @@ function ProgressContent() {
   async function handleExport() {
     setExporting(true);
     try {
-      await api.downloadProgressExcel(includeHidden);
+      await api.downloadProgressExcel();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Không xuất được file Excel");
     } finally {
@@ -345,15 +285,14 @@ function ProgressContent() {
   const plan = data?.sources.find((s) => s.kind === "plan");
   const failed = data?.sources.filter((s) => !s.ok_on_last_run) ?? [];
   const staleDay = data?.updated_at ? data.updated_at.slice(0, 10) < todayISO() : false;
-  const hiddenTotal = data ? data.hidden_counts.closed + data.hidden_counts.shipped + data.hidden_counts.done : 0;
 
   return (
     <PageShell
       title="Tiến độ đơn hàng"
       description={
         isExecutive
-          ? `Các đơn đang chạy trên line của ${user?.executive_name ?? "bạn"}, lấy từ bảng tiến độ (Pack-cut khác 0)`
-          : "Các đơn đang chạy, lấy từ bảng tiến độ của mọi người mỗi sáng (Pack-cut khác 0)"
+          ? `Các đơn đang chạy trên line của ${user?.executive_name ?? "bạn"}, lấy từ bảng tiến độ (Pack-cut khác 0 hoặc đã có Cut chưa có Sew)`
+          : "Các đơn đang chạy, lấy từ bảng tiến độ của mọi người mỗi sáng (Pack-cut khác 0 hoặc đã có Cut chưa có Sew)"
       }
       actions={
         <>
@@ -475,20 +414,8 @@ function ProgressContent() {
           <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} />
           Chỉ đơn Pack-cut âm
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted">
-          <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
-          Hiện cả đơn đã ẩn{hiddenTotal ? ` (${hiddenTotal})` : ""}
-        </label>
         <span className="ml-auto text-sm text-muted">{data ? `${filtered.length} đơn` : ""}</span>
       </div>
-
-      {data && !includeHidden && hiddenTotal ? (
-        <p className="mb-3 text-xs text-muted">
-          Đang ẩn {data.hidden_counts.shipped + data.hidden_counts.done} đơn đã qua Shipment plan quá{" "}
-          {data.shipment_grace_days} ngày hoặc ghi &quot;Done&quot;
-          {data.hidden_counts.closed ? ` và ${data.hidden_counts.closed} đơn đã bấm Đóng` : ""}.
-        </p>
-      ) : null}
 
       {!data && !error ? <p className="text-sm text-muted">Đang tải...</p> : null}
       {data && data.orders.length === 0 ? (

@@ -1,6 +1,6 @@
 import secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,11 +38,10 @@ def ingest_progress(
 
 @router.get("", response_model=ProgressResponse)
 def get_progress(
-    include_hidden: bool = Query(default=False),
     current_user: User = Depends(require_dashboard_viewer),
     db: Session = Depends(get_db),
 ):
-    return build_view(db, current_user, local_today(), include_hidden)
+    return build_view(db, current_user, local_today())
 
 
 @router.put("/notes", response_model=ProgressNoteOut)
@@ -67,10 +66,6 @@ def update_note(
         note.ex_remark = (payload.ex_remark or "").strip() or None
     if "fin_remark" in sent:
         note.fin_remark = (payload.fin_remark or "").strip() or None
-    if "is_closed" in sent and payload.is_closed is not None and payload.is_closed != note.is_closed:
-        note.is_closed = payload.is_closed
-        note.closed_by = current_user.full_name if payload.is_closed else None
-        note.closed_at = now if payload.is_closed else None
     note.updated_by = current_user.full_name
     note.updated_at = now
     db.commit()
@@ -78,15 +73,11 @@ def update_note(
         order_key=note.order_key,
         ex_remark=note.ex_remark,
         fin_remark=note.fin_remark,
-        is_closed=note.is_closed,
-        closed_by=note.closed_by,
-        closed_at=note.closed_at,
     )
 
 
 @router.get("/excel")
 def export_progress_excel(
-    include_hidden: bool = Query(default=False),
     current_user: User = Depends(require_dashboard_viewer),
     db: Session = Depends(get_db),
 ):
@@ -94,7 +85,7 @@ def export_progress_excel(
     from app.services.progress_excel import generate_progress_excel
 
     today = local_today()
-    view = build_view(db, current_user, today, include_hidden)
+    view = build_view(db, current_user, today)
     buffer = generate_progress_excel(view["orders"], today)
     filename = f"TienDoDonHang_{today.strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(
