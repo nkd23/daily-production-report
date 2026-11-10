@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
@@ -27,6 +27,17 @@ function dateTime(value: string | null) {
   if (!value) return "-";
   const d = new Date(value);
   return `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.toLocaleDateString("vi-VN")}`;
+}
+
+/** Plain-language reason for the agent's error text (Python exception names). */
+function errorHint(error: string | null) {
+  const e = error ?? "";
+  if (e.startsWith("PermissionError")) return "file đang bị khóa hoặc OneDrive đang đồng bộ dở";
+  if (/BadZipFile|InvalidFileException|zipfile|EOFError/i.test(e)) return "file hỏng hoặc chưa tải xong từ OneDrive";
+  if (e.startsWith("FileNotFoundError")) return "file đã bị đổi tên/xóa trong lúc đọc";
+  if (e.includes("Không thấy sheet")) return 'không thấy sheet "bảng tiến độ" - có thể đã bị đổi tên';
+  if (e.includes("Thiếu cột")) return "dòng tiêu đề bị đổi tên cột Line / JO / Pack - cut";
+  return "lỗi khi đọc file";
 }
 
 function num(value: number | null) {
@@ -104,25 +115,68 @@ function RemarkCell({
   );
 }
 
-const TH = "whitespace-nowrap px-2 py-2 font-medium";
-const TD = "whitespace-nowrap px-2 py-1.5";
+// Header row and the Line / Byr / JO / Màu columns stay put while the table
+// scrolls (like Excel's freeze panes). border-separate (set on the table) so
+// the borders of those sticky cells move with them.
+const TH = "sticky top-0 z-20 whitespace-nowrap border-b border-border bg-surface-muted px-2 py-2 font-medium";
+const TD = "whitespace-nowrap border-b border-border px-2 py-1.5";
+const TH_PLAIN = "whitespace-nowrap px-2 py-2 font-medium";
+const COLUMN_COUNT = 22;
+
+// Line, Byr, JO, Màu: fixed widths, and which of them stay frozen. A phone
+// has no room for four frozen columns, so there only Line and JO stay put
+// (Byr and Màu scroll under them).
+type FrozenLayout = { widths: number[]; frozen: boolean[] };
+const WIDE: FrozenLayout = { widths: [56, 120, 124, 96], frozen: [true, true, true, true] };
+const COMPACT: FrozenLayout = { widths: [56, 88, 116, 64], frozen: [true, false, true, false] };
+
+function useCompact() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia("(max-width: 639px)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(max-width: 639px)").matches,
+    () => false
+  );
+}
+
+function frozenProps(layout: FrozenLayout, i: number, header: boolean) {
+  const w = layout.widths[i];
+  const style: React.CSSProperties = { width: w, minWidth: w, maxWidth: w };
+  const lastFrozen = layout.frozen.lastIndexOf(true);
+  let className = "truncate";
+  if (layout.frozen[i]) {
+    style.left = layout.widths.slice(0, i).reduce((sum, width, j) => sum + (layout.frozen[j] ? width : 0), 0);
+    className += header ? " z-30" : " sticky z-10 bg-surface";
+    if (i === lastFrozen) className += " border-r border-r-border";
+  }
+  return { className, style };
+}
 
 function OrdersTable({
-  orders,
+  groups,
   onUpdate,
 }: {
-  orders: ProgressOrder[];
+  groups: [string, ProgressOrder[]][];
   onUpdate: (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => Promise<void>;
 }) {
+  const layout = useCompact() ? COMPACT : WIDE;
+  const cell = (i: number, header = false) => {
+    const { className, style } = frozenProps(layout, i, header);
+    return { className: `${header ? TH : TD} ${className}`, style };
+  };
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
+    <div className="max-h-[calc(100dvh-10rem)] overflow-auto lg:max-h-[calc(100dvh-6rem)]">
+      <table className="w-full border-separate border-spacing-0 text-left text-xs">
         <thead>
-          <tr className="border-b border-border bg-surface-muted text-[11px] uppercase tracking-wide text-muted">
-            <th className={`${TH} sticky left-0 z-10 bg-surface-muted`}>Line</th>
-            <th className={TH}>Byr</th>
-            <th className={TH}>JO</th>
-            <th className={TH}>Màu</th>
+          <tr className="text-[11px] uppercase tracking-wide text-muted">
+            {["Line", "Byr", "JO", "Màu"].map((label, i) => (
+              <th key={label} {...cell(i, true)}>
+                {label}
+              </th>
+            ))}
             <th className={TH}>Cust. Style</th>
             <th className={TH}>WF</th>
             <th className={TH}>BPO</th>
@@ -149,41 +203,73 @@ function OrdersTable({
           </tr>
         </thead>
         <tbody>
-          {orders.map((o, i) => (
-            <tr key={`${o.order_key}|${o.source_owner}|${i}`} className="border-b border-border last:border-0 hover:bg-primary-soft/20">
-              <td className={`${TD} sticky left-0 z-10 bg-surface font-semibold`}>{o.line_number}</td>
-              <td className={TD}>{o.buyer}</td>
-              <td className={`${TD} font-medium`}>{o.jo}</td>
-              <td className={`${TD} max-w-[8rem] truncate`} title={o.color ?? undefined}>
-                {o.color}
-              </td>
-              <td className={TD}>{o.cust_style_no}</td>
-              <td className={TD}>{o.product_category}</td>
-              <td className={TD}>{shortDate(o.bpo_date)}</td>
-              <td className={`${TD} font-medium`}>{shortDate(o.shipment_plan)}</td>
-              <td className={TD}>{shortDate(o.order_carton)}</td>
-              <td className={TD}>{shortDate(o.start_sew)}</td>
-              <td className={TD}>{shortDate(o.end_sew)}</td>
-              <td className={TD}>{shortDate(o.end_pack)}</td>
-              <td className={`${TD} text-right tabular-nums`}>{num(o.order_qty)}</td>
-              <td className={`${TD} text-right tabular-nums`}>{num(o.allocate_qty)}</td>
-              <td className={`${TD} text-right tabular-nums`}>{num(o.cut_qty)}</td>
-              <td className={`${TD} text-right tabular-nums`}>{num(o.sew_qty)}</td>
-              <td className={`${TD} text-right tabular-nums`}>{num(o.pack_qty)}</td>
-              <td className={`${TD} text-right font-semibold tabular-nums ${o.pack_cut < 0 ? "text-danger" : o.pack_cut > 0 ? "text-success" : "text-muted"}`}>
-                {num(o.pack_cut)}
-              </td>
-              <td className={`${TD} text-right tabular-nums`}>
-                {o.late != null ? o.late : <span className="text-muted">{o.late_label}</span>}
-              </td>
-              <td className="px-1 py-1">
-                <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
-              </td>
-              <td className="px-1 py-1">
-                <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
-              </td>
-              <td className={`${TD} text-muted`}>{o.source_owner}</td>
-            </tr>
+          {groups.map(([name, orders]) => (
+            <Fragment key={name}>
+              <tr>
+                {/* Sticks just under the header row, so the Executive stays visible while scrolling through their orders. */}
+                <td colSpan={COLUMN_COUNT} className="sticky top-[31px] z-[15] border-b border-border bg-primary-soft px-0 py-2">
+                  <div className="sticky left-0 inline-flex items-center gap-2 px-3">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: name === UNASSIGNED ? "#94a3b8" : execColor(name).solid }}
+                    />
+                    <span className="text-sm font-semibold">{name}</span>
+                    <span className="text-muted">{orders.length} đơn</span>
+                    {name === UNASSIGNED ? (
+                      <span className="text-muted">
+                        - line chưa có trong Cấu hình Line: {[...new Set(orders.map((o) => o.line_number))].join(", ")}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+              {orders.map((o, i) => (
+                <tr key={`${o.order_key}|${o.source_owner}|${i}`}>
+                  <td {...cell(0)}>
+                    <span className="font-semibold">{o.line_number}</span>
+                  </td>
+                  <td {...cell(1)} title={o.buyer ?? undefined}>
+                    {o.buyer}
+                  </td>
+                  <td {...cell(2)} title={o.jo}>
+                    <span className="font-medium">{o.jo}</span>
+                  </td>
+                  <td {...cell(3)} title={o.color ?? undefined}>
+                    {o.color}
+                  </td>
+                  <td className={TD}>{o.cust_style_no}</td>
+                  <td className={TD}>{o.product_category}</td>
+                  <td className={TD}>{shortDate(o.bpo_date)}</td>
+                  <td className={`${TD} font-medium`}>{shortDate(o.shipment_plan)}</td>
+                  <td className={TD}>{shortDate(o.order_carton)}</td>
+                  <td className={TD}>{shortDate(o.start_sew)}</td>
+                  <td className={TD}>{shortDate(o.end_sew)}</td>
+                  <td className={TD}>{shortDate(o.end_pack)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{num(o.order_qty)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{num(o.allocate_qty)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{num(o.cut_qty)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{num(o.sew_qty)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{num(o.pack_qty)}</td>
+                  <td
+                    className={`${TD} text-right font-semibold tabular-nums ${
+                      o.pack_cut < 0 ? "text-danger" : o.pack_cut > 0 ? "text-success" : "text-muted"
+                    }`}
+                  >
+                    {num(o.pack_cut)}
+                  </td>
+                  <td className={`${TD} text-right tabular-nums`}>
+                    {o.late != null ? o.late : <span className="text-muted">{o.late_label}</span>}
+                  </td>
+                  <td className="border-b border-border px-1 py-1">
+                    <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
+                  </td>
+                  <td className="border-b border-border px-1 py-1">
+                    <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
+                  </td>
+                  <td className={`${TD} text-muted`}>{o.source_owner}</td>
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -326,7 +412,8 @@ function ProgressContent() {
             </span>
             {failed.length ? (
               <span className="font-medium text-warning">
-                Không đọc được: {failed.map((s) => s.owner).join(", ")} (đang hiện số lần đọc được gần nhất)
+                Không đọc được: {failed.map((s) => `${s.owner} (${errorHint(s.last_error)})`).join(", ")} - đang hiện số
+                lần đọc được gần nhất, bấm &quot;Xem file nguồn&quot; để xem chi tiết
               </span>
             ) : null}
             <button type="button" onClick={() => setShowSources((v) => !v)} className="ml-auto text-primary hover:underline">
@@ -338,12 +425,12 @@ function ProgressContent() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-border bg-surface-muted text-[11px] uppercase tracking-wide text-muted">
-                    <th className={TH}>Người theo dõi</th>
-                    <th className={TH}>File</th>
-                    <th className={TH}>Sửa lần cuối</th>
-                    <th className={TH}>Đọc được lúc</th>
-                    <th className={`${TH} text-right`}>Số dòng</th>
-                    <th className={TH}>Trạng thái</th>
+                    <th className={TH_PLAIN}>Người theo dõi</th>
+                    <th className={TH_PLAIN}>File</th>
+                    <th className={TH_PLAIN}>Sửa lần cuối</th>
+                    <th className={TH_PLAIN}>Đọc được lúc</th>
+                    <th className={`${TH_PLAIN} text-right`}>Số dòng</th>
+                    <th className={TH_PLAIN}>Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -361,8 +448,10 @@ function ProgressContent() {
                         {s.ok_on_last_run ? (
                           <Badge tone="success">OK</Badge>
                         ) : (
-                          <span title={s.last_error ?? undefined}>
+                          <span className="flex items-center gap-2 whitespace-normal">
                             <Badge tone="danger">Lỗi</Badge>
+                            <span className="text-danger">{errorHint(s.last_error)}</span>
+                            <span className="text-muted">{s.last_error}</span>
                           </span>
                         )}
                       </td>
@@ -427,26 +516,11 @@ function ProgressContent() {
         <Card className="p-6 text-sm text-muted">Không có đơn nào khớp bộ lọc.</Card>
       ) : null}
 
-      <div className="space-y-5">
-        {groups.map(([name, orders]) => (
-          <Card key={name} className="overflow-hidden p-0">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: name === UNASSIGNED ? "#94a3b8" : execColor(name).solid }}
-              />
-              <h2 className="text-sm font-semibold">{name}</h2>
-              <span className="text-xs text-muted">{orders.length} đơn</span>
-              {name === UNASSIGNED ? (
-                <span className="text-xs text-muted">
-                  - line chưa có trong Cấu hình Line: {[...new Set(orders.map((o) => o.line_number))].join(", ")}
-                </span>
-              ) : null}
-            </div>
-            <OrdersTable orders={orders} onUpdate={onUpdate} />
-          </Card>
-        ))}
-      </div>
+      {groups.length ? (
+        <Card className="overflow-hidden p-0">
+          <OrdersTable groups={groups} onUpdate={onUpdate} />
+        </Card>
+      ) : null}
     </PageShell>
   );
 }
