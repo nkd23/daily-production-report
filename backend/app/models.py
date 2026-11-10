@@ -197,3 +197,77 @@ class ReportHistory(Base):
 
     line: Mapped["Line"] = relationship()
     changed_by_user: Mapped["User | None"] = relationship(foreign_keys=[changed_by])
+
+
+class ProgressSource(Base):
+    """One file the progress agent read on its last run: a person's "bảng tiến
+    độ" tracker (kind="tracker") or the THV PRODUCTION PLAN file it looked up
+    WF/Cust. Style from (kind="plan"). Kept so the page can say when each
+    tracker was last read successfully - a tracker that failed to open keeps
+    its previous rows instead of vanishing (see app.services.progress)."""
+
+    __tablename__ = "progress_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_name: Mapped[str] = mapped_column(Unicode(255), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(Unicode(20), nullable=False, default="tracker")
+    owner: Mapped[str] = mapped_column(Unicode(100), nullable=False)
+    file_modified_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    last_attempt_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
+    last_ok_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ProgressOrder(Base):
+    """One running order row (Pack-cut khác 0) copied from a tracker by the
+    progress agent. A tracker's rows are all replaced on every successful
+    read, so nothing here is edited on the web - remarks and the "Đóng đơn"
+    flag live in ProgressNote, keyed by order_key, and survive the daily
+    replacement.
+
+    Date columns are kept as text: usually an ISO date, but trackers also
+    hold things like "Done" or "Not yet 4" that people rely on seeing."""
+
+    __tablename__ = "progress_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_file: Mapped[str] = mapped_column(Unicode(255), nullable=False, index=True)
+    order_key: Mapped[str] = mapped_column(Unicode(200), nullable=False, index=True)
+    line_number: Mapped[str] = mapped_column(Unicode(20), nullable=False)
+    line_raw: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    jo: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    color: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    bpo_date: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    shipment_plan: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    order_carton: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    start_sew: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    end_sew: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    end_pack: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    order_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allocate_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cut_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sew_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_cut: Mapped[int] = mapped_column(Integer, nullable=False)
+    product_category: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    cust_style_no: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+
+
+class ProgressNote(Base):
+    """What people add to an order on the web: EX/FIN REMARK and "Đóng đơn".
+    Keyed by ProgressOrder.order_key (line|JO|color) rather than a foreign
+    key, because the order rows are rebuilt from the trackers every day."""
+
+    __tablename__ = "progress_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_key: Mapped[str] = mapped_column(Unicode(200), unique=True, nullable=False)
+    ex_remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    fin_remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    is_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    closed_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    closed_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    updated_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)

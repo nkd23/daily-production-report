@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound, Table2, CalendarRange, Crosshair } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Settings2, LogOut, Factory, KeyRound, Table2, CalendarRange, Crosshair, PackageSearch } from "lucide-react";
 import { useAuth, roleLabel } from "@/lib/auth-context";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import type { UserRole } from "@/lib/types";
@@ -14,6 +14,7 @@ const NAV_ITEMS: { href: string; label: string; shortLabel: string; icon: typeof
   { href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep", "executive"] },
   { href: "/bao-cao-tuan", label: "Báo cáo tuần", shortLabel: "Tuần", icon: CalendarRange, roles: ["thu_ky", "sep", "executive"] },
   { href: "/target", label: "Target", shortLabel: "Target", icon: Crosshair, roles: ["thu_ky", "sep", "executive"] },
+  { href: "/tien-do", label: "Tiến độ", shortLabel: "Tiến độ", icon: PackageSearch, roles: ["thu_ky", "sep", "executive"] },
   { href: "/du-lieu-san-xuat", label: "Dữ liệu sản xuất", shortLabel: "Dữ liệu", icon: Table2, roles: ["thu_ky", "sep", "executive"] },
   { href: "/thu-ky/config", label: "Cấu hình Line", shortLabel: "Cấu hình", icon: Settings2, roles: ["thu_ky", "sep"] },
 ];
@@ -33,7 +34,8 @@ export function Navbar() {
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2 font-semibold text-primary">
             <Factory size={22} />
-            <span>Báo Cáo Sản Lượng</span>
+            {/* lg-xl: the page menu needs the room; the icon still marks the app. */}
+            <span className="lg:hidden xl:inline">Báo Cáo Sản Lượng</span>
           </div>
 
           <nav className="hidden flex-1 items-center gap-1 overflow-x-auto lg:flex">

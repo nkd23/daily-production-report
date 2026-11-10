@@ -288,3 +288,73 @@ export interface ReportHistoryEntry {
   old_values: ReportHistoryValues | null;
   new_values: ReportHistoryValues | null;
 }
+
+// ---------- Tiến độ đơn hàng ----------
+export type ProgressHiddenReason = "closed" | "shipped" | "done";
+
+export interface ProgressOrder {
+  order_key: string;
+  line_number: string;
+  executive_name: string | null;
+  pu_group: PuGroup | null;
+  source_owner: string;
+  buyer: string | null;
+  jo: string;
+  color: string | null;
+  cust_style_no: string | null;
+  product_category: string | null;
+  bpo_date: string | null;
+  shipment_plan: string | null;
+  order_carton: string | null;
+  start_sew: string | null;
+  end_sew: string | null;
+  end_pack: string | null;
+  order_qty: number | null;
+  allocate_qty: number | null;
+  cut_qty: number | null;
+  sew_qty: number | null;
+  pack_qty: number | null;
+  pack_cut: number;
+  late: number | null;
+  late_label: string | null;
+  ex_remark: string | null;
+  fin_remark: string | null;
+  hidden_reason: ProgressHiddenReason | null;
+  closed_by: string | null;
+  closed_at: string | null;
+}
+
+export interface ProgressSource {
+  file_name: string;
+  kind: "tracker" | "plan";
+  owner: string;
+  file_modified_at: string | null;
+  last_ok_at: string | null;
+  last_error: string | null;
+  row_count: number;
+  ok_on_last_run: boolean;
+}
+
+export interface ProgressResponse {
+  updated_at: string | null;
+  shipment_grace_days: number;
+  hidden_counts: Record<ProgressHiddenReason, number>;
+  sources: ProgressSource[];
+  orders: ProgressOrder[];
+}
+
+export interface ProgressNoteUpdate {
+  order_key: string;
+  ex_remark?: string;
+  fin_remark?: string;
+  is_closed?: boolean;
+}
+
+export interface ProgressNote {
+  order_key: string;
+  ex_remark: string | null;
+  fin_remark: string | null;
+  is_closed: boolean;
+  closed_by: string | null;
+  closed_at: string | null;
+}

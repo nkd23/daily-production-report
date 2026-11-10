@@ -23,3 +23,15 @@ data-export*.json
 
 # Production secrets (DB password, SECRET_KEY) generated on the server
 /.env
+
+# Progress agent build output and per-PC settings (config.ini holds the ingest key)
+/progress-agent/.build-venv/
+/progress-agent/build/
+/progress-agent/dist/
+/progress-agent/*.spec
+/progress-agent/config.ini
+/progress-agent/thu_nghiem.json
+/progress-agent/DayTienDo.log
+
+# Claude deliverables (the DayTienDo bundle holds the production ingest key)
+/Claude outputs/

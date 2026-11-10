@@ -61,6 +61,7 @@ git). Sau khi đổi biến phải deploy lại.
 | `DATABASE_URL` | Chuỗi **Transaction pooler** (cổng **6543**) của Supabase, dạng `postgresql+psycopg://postgres.<ref>:<mật khẩu đã percent-encode>@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres` |
 | `SECRET_KEY` | Khoá ký phiên đăng nhập, chuỗi ngẫu nhiên ≥ 32 ký tự. Đổi khoá = mọi người phải đăng nhập lại |
 | `CRON_SECRET` | Mã bí mật Vercel Cron gửi kèm khi gọi `/api/cron/retention` |
+| `PROGRESS_INGEST_KEY` | Khóa máy văn phòng gửi kèm khi đẩy bảng tiến độ lên `/api/progress/ingest` (xem `progress-agent/README.md`) |
 | `ENVIRONMENT` | `production` (từ chối chạy với `SECRET_KEY` mẫu, ẩn `/docs`) |
 | `CORS_ORIGINS` | Địa chỉ web được phép gọi API, cách nhau dấu phẩy |
 

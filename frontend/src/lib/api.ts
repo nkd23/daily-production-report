@@ -5,6 +5,9 @@ import type {
   Line,
   LineTargetRow,
   LineWithReport,
+  ProgressNote,
+  ProgressNoteUpdate,
+  ProgressResponse,
   ReportHistoryEntry,
   User,
   UserRole,
@@ -127,22 +130,39 @@ export const api = {
 
   dashboardWeekly: (weekOf: string) => request<WeeklyResponse>(`/api/dashboard/weekly?week_of=${weekOf}`),
 
+  getProgress: (includeHidden = false) =>
+    request<ProgressResponse>(`/api/progress${includeHidden ? "?include_hidden=true" : ""}`),
+  updateProgressNote: (payload: ProgressNoteUpdate) =>
+    request<ProgressNote>("/api/progress/notes", { method: "PUT", body: JSON.stringify(payload) }),
+
+  async downloadProgressExcel(includeHidden = false) {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/progress/excel${includeHidden ? "?include_hidden=true" : ""}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(res.status, "Không xuất được file Excel");
+    saveBlob(await res.blob(), `TienDoDonHang_${new Date().toLocaleDateString("sv-SE").replace(/-/g, "")}.xlsx`);
+  },
+
   async downloadExcel(reportDate: string) {
     const token = getToken();
     const res = await fetch(`${API_URL}/api/export/excel?report_date=${reportDate}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw new ApiError(res.status, "Không xuất được file Excel");
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `BaoCaoSanLuong_${reportDate.replace(/-/g, "")}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    saveBlob(await res.blob(), `BaoCaoSanLuong_${reportDate.replace(/-/g, "")}.xlsx`);
   },
 };
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
 
 export { API_URL };

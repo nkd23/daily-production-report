@@ -373,3 +373,116 @@ class WeeklyResponse(BaseModel):
     lines: list[WeeklyLineSummary]
     summary_table: list[GroupSummary]
     wip_reasons: WeeklyWipReasonTotals
+
+
+# ---------- Tiến độ đơn hàng (progress trackers) ----------
+class ProgressRowIn(BaseModel):
+    """One tracker row as the agent read it. Dates arrive as ISO text, other
+    cell text as-is; the server cleans and truncates (app.services.progress)
+    rather than rejecting a whole morning's upload over one odd cell."""
+
+    line: str | None = None
+    buyer: str | None = None
+    jo: str | None = None
+    color: str | None = None
+    bpo_date: str | None = None
+    shipment_plan: str | None = None
+    order_carton: str | None = None
+    start_sew: str | None = None
+    end_sew: str | None = None
+    end_pack: str | None = None
+    order_qty: float | None = None
+    allocate_qty: float | None = None
+    cut_qty: float | None = None
+    sew_qty: float | None = None
+    pack_qty: float | None = None
+    pack_cut: float | None = None
+    product_category: str | None = None
+    cust_style_no: str | None = None
+
+
+class ProgressSourceIn(BaseModel):
+    file_name: str = Field(min_length=1)
+    modified_at: datetime | None = None
+    error: str | None = None
+    rows: list[ProgressRowIn] = Field(default_factory=list, max_length=20000)
+
+
+class ProgressIngest(BaseModel):
+    agent_version: str | None = None
+    plan_file: str | None = None
+    plan_modified_at: datetime | None = None
+    plan_error: str | None = None
+    plan_jo_count: int = 0
+    sources: list[ProgressSourceIn] = Field(max_length=200)
+
+
+class ProgressNoteUpdate(BaseModel):
+    """Only the fields sent are changed."""
+
+    order_key: str = Field(min_length=1, max_length=200)
+    ex_remark: str | None = Field(default=None, max_length=1000)
+    fin_remark: str | None = Field(default=None, max_length=1000)
+    is_closed: bool | None = None
+
+
+class ProgressNoteOut(BaseModel):
+    order_key: str
+    ex_remark: str | None
+    fin_remark: str | None
+    is_closed: bool
+    closed_by: str | None
+    closed_at: datetime | None
+
+
+class ProgressOrderOut(BaseModel):
+    order_key: str
+    line_number: str
+    executive_name: str | None
+    pu_group: str | None
+    source_owner: str
+    buyer: str | None
+    jo: str
+    color: str | None
+    cust_style_no: str | None
+    product_category: str | None
+    bpo_date: str | None
+    shipment_plan: str | None
+    order_carton: str | None
+    start_sew: str | None
+    end_sew: str | None
+    end_pack: str | None
+    order_qty: int | None
+    allocate_qty: int | None
+    cut_qty: int | None
+    sew_qty: int | None
+    pack_qty: int | None
+    pack_cut: int
+    late: int | None
+    late_label: str | None
+    ex_remark: str | None
+    fin_remark: str | None
+    # None = showing normally; "closed" (Đóng đơn), "shipped" (Shipment plan
+    # past the grace days) or "done" (tracker says shipped) when hidden.
+    hidden_reason: str | None
+    closed_by: str | None
+    closed_at: datetime | None
+
+
+class ProgressSourceOut(BaseModel):
+    file_name: str
+    kind: str
+    owner: str
+    file_modified_at: datetime | None
+    last_ok_at: datetime | None
+    last_error: str | None
+    row_count: int
+    ok_on_last_run: bool
+
+
+class ProgressResponse(BaseModel):
+    updated_at: datetime | None
+    shipment_grace_days: int
+    hidden_counts: dict[str, int]
+    sources: list[ProgressSourceOut]
+    orders: list[ProgressOrderOut]

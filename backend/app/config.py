@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Sent by Vercel Cron as "Authorization: Bearer <CRON_SECRET>" - see
     # /api/cron/retention in app.main.
     cron_secret: str = ""
+    # Sent by the "bảng tiến độ" agent on the office PC as the X-Progress-Key
+    # header - see /api/progress/ingest. Empty disables ingestion.
+    progress_ingest_key: str = ""
     # Set automatically by Vercel at runtime.
     vercel: str = ""
 
