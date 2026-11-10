@@ -216,6 +216,20 @@ function NumberCell({
   );
 }
 
+// Late = days since End sew while the order is not packed out. Over 4 days
+// is late (red); 3-4 days is at risk of going over (amber + warning).
+const LATE_LIMIT = 4;
+const LATE_RISK_FROM = 3;
+
+function lateLevel(o: ProgressOrder): "late" | "risk" | null {
+  if (o.late == null) return null;
+  if (o.late > LATE_LIMIT) return "late";
+  if (o.late >= LATE_RISK_FROM) return "risk";
+  return null;
+}
+
+const ROW_BG = { late: "bg-danger-soft", risk: "bg-warning-soft" } as const;
+
 const QTY_FIELDS: ProgressQtyField[] = ["order_qty", "allocate_qty", "cut_qty", "sew_qty", "pack_qty"];
 
 // Header row and the Line / Byr / JO / Màu columns stay put while the table
@@ -252,7 +266,7 @@ function frozenProps(layout: FrozenLayout, i: number, header: boolean) {
   let className = "truncate";
   if (layout.frozen[i]) {
     style.left = layout.widths.slice(0, i).reduce((sum, width, j) => sum + (layout.frozen[j] ? width : 0), 0);
-    className += header ? " z-30" : " sticky z-10 bg-surface";
+    className += header ? " z-30" : " sticky z-10 bg-inherit";
     if (i === lastFrozen) className += " border-r border-r-border";
   }
   return { className, style };
@@ -284,8 +298,6 @@ function OrdersTable({
                 {label}
               </th>
             ))}
-            <th className={TH}>Cust. Style</th>
-            <th className={TH}>WF</th>
             <th className={TH}>BPO</th>
             <th className={TH}>Shipment</th>
             <th className={TH}>Carton</th>
@@ -307,6 +319,8 @@ function OrdersTable({
             <th className={TH}>EX remark</th>
             <th className={TH}>FIN remark</th>
             <th className={TH}>Nguồn</th>
+            <th className={TH}>Cust. Style</th>
+            <th className={TH}>WF</th>
             <th className={TH} />
           </tr>
         </thead>
@@ -332,7 +346,12 @@ function OrdersTable({
                 </td>
               </tr>
               {orders.map((o, i) => (
-                <tr key={`${o.order_key}|${o.source_owner}|${i}`} className={o.is_closed ? "text-muted line-through decoration-muted/50" : ""}>
+                <tr
+                  key={`${o.order_key}|${o.source_owner}|${i}`}
+                  className={`${lateLevel(o) ? ROW_BG[lateLevel(o)!] : "bg-surface"} ${
+                    o.is_closed ? "text-muted line-through decoration-muted/50" : ""
+                  }`}
+                >
                   <td {...cell(0)}>
                     <span className="font-semibold">{o.line_number}</span>
                   </td>
@@ -345,8 +364,6 @@ function OrdersTable({
                   <td {...cell(3)} title={o.color ?? undefined}>
                     {o.color}
                   </td>
-                  <td className={TD}>{o.cust_style_no}</td>
-                  <td className={TD}>{o.product_category}</td>
                   <td className={TD}>{shortDate(o.bpo_date)}</td>
                   <td className={`${TD} font-medium`}>{shortDate(o.shipment_plan)}</td>
                   <td className={TD}>{shortDate(o.order_carton)}</td>
@@ -365,7 +382,22 @@ function OrdersTable({
                     {num(o.pack_cut)}
                   </td>
                   <td className={`${TD} text-right tabular-nums`}>
-                    {o.late != null ? o.late : <span className="text-muted">{o.late_label}</span>}
+                    {lateLevel(o) === "late" ? (
+                      <span className="font-bold text-danger" title={`Late ${o.late} ngày (quá ${LATE_LIMIT} ngày kể từ End sew)`}>
+                        {o.late}
+                      </span>
+                    ) : lateLevel(o) === "risk" ? (
+                      <span
+                        className="inline-flex items-center gap-1 font-semibold text-warning"
+                        title={`Nguy cơ late: đã ${o.late} ngày từ End sew, quá ${LATE_LIMIT} ngày là late`}
+                      >
+                        <TriangleAlert size={12} /> {o.late}
+                      </span>
+                    ) : o.late != null ? (
+                      o.late
+                    ) : (
+                      <span className="text-muted">{o.late_label}</span>
+                    )}
                   </td>
                   <td className="border-b border-border px-1 py-1">
                     <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
@@ -374,6 +406,8 @@ function OrdersTable({
                     <RemarkCell value={o.fin_remark} onSave={(t) => onUpdate(o, { fin_remark: t })} />
                   </td>
                   <td className={`${TD} text-muted`}>{o.source_owner}</td>
+                  <td className={TD}>{o.cust_style_no}</td>
+                  <td className={TD}>{o.product_category}</td>
                   <td className={`${TD} text-right no-underline`}>
                     {o.is_closed ? (
                       <button
@@ -422,6 +456,7 @@ function ProgressContent() {
   const [executive, setExecutive] = useState("");
   const [line, setLine] = useState("");
   const [onlyShort, setOnlyShort] = useState(false);
+  const [lateFilter, setLateFilter] = useState<"" | "late" | "risk">("");
   const [includeClosed, setIncludeClosed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -504,11 +539,27 @@ function ProgressContent() {
       if (executive && (o.executive_name ?? UNASSIGNED) !== executive) return false;
       if (line && o.line_number !== line) return false;
       if (onlyShort && o.pack_cut >= 0) return false;
+      if (lateFilter && lateLevel(o) !== lateFilter) return false;
       if (!q) return true;
       return [o.jo, o.buyer, o.color, o.cust_style_no, o.product_category, o.ex_remark, o.fin_remark]
         .some((v) => v?.toLowerCase().includes(q));
     });
-  }, [data, search, executive, line, onlyShort]);
+  }, [data, search, executive, line, onlyShort, lateFilter]);
+
+  // Counted over the rows the other filters leave, ignoring the late filter
+  // itself, so the numbers don't collapse to the selected bucket.
+  const lateCounts = useMemo(() => {
+    const counts = { late: 0, risk: 0 };
+    const q = search.trim().toLowerCase();
+    for (const o of data?.orders ?? []) {
+      if (executive && (o.executive_name ?? UNASSIGNED) !== executive) continue;
+      if (line && o.line_number !== line) continue;
+      if (q && ![o.jo, o.buyer, o.color, o.cust_style_no].some((v) => v?.toLowerCase().includes(q))) continue;
+      const level = lateLevel(o);
+      if (level) counts[level]++;
+    }
+    return counts;
+  }, [data, search, executive, line]);
 
   const groups = useMemo(() => {
     const map = new Map<string, ProgressOrder[]>();
@@ -541,8 +592,8 @@ function ProgressContent() {
       title="Tiến độ đơn hàng"
       description={
         isExecutive
-          ? `Các đơn đang chạy trên line của ${user?.executive_name ?? "bạn"}, lấy từ bảng tiến độ (Pack-cut khác 0 hoặc đã có Cut chưa có Sew)`
-          : "Các đơn đang chạy, lấy từ bảng tiến độ của mọi người mỗi sáng (Pack-cut khác 0 hoặc đã có Cut chưa có Sew)"
+          ? `Các đơn đang chạy trên line của ${user?.executive_name ?? "bạn"}, lấy từ bảng tiến độ (chưa End pack, Pack-cut khác 0 hoặc đã có Cut chưa có Sew)`
+          : "Các đơn đang chạy, lấy từ bảng tiến độ của mọi người mỗi sáng (chưa End pack, Pack-cut khác 0 hoặc đã có Cut chưa có Sew)"
       }
       actions={
         <>
@@ -663,6 +714,15 @@ function ProgressContent() {
             </option>
           ))}
         </Select>
+        <Select
+          value={lateFilter}
+          onChange={(e) => setLateFilter(e.target.value as "" | "late" | "risk")}
+          className="!w-auto"
+        >
+          <option value="">Mọi tình trạng late</option>
+          <option value="late">Late &gt; {LATE_LIMIT} ngày ({lateCounts.late})</option>
+          <option value="risk">Nguy cơ late ({lateCounts.risk})</option>
+        </Select>
         <label className="flex items-center gap-1.5 text-sm text-muted">
           <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} />
           Chỉ đơn Pack-cut âm
@@ -671,7 +731,11 @@ function ProgressContent() {
           <input type="checkbox" checked={includeClosed} onChange={(e) => setIncludeClosed(e.target.checked)} />
           Hiện đơn đã đóng{data?.closed_count ? ` (${data.closed_count})` : ""}
         </label>
-        <span className="ml-auto text-sm text-muted">{data ? `${filtered.length} đơn` : ""}</span>
+        <span className="ml-auto flex items-center gap-2 text-sm text-muted">
+          {data ? `${filtered.length} đơn` : ""}
+          {lateCounts.late ? <Badge tone="danger">{lateCounts.late} late</Badge> : null}
+          {lateCounts.risk ? <Badge tone="warning">{lateCounts.risk} nguy cơ</Badge> : null}
+        </span>
       </div>
 
       {!data && !error ? <p className="text-sm text-muted">Đang tải...</p> : null}

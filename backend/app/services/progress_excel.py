@@ -41,6 +41,11 @@ DATE_FIELDS = {"bpo_date", "shipment_plan", "order_carton", "start_sew", "end_se
 HEADER_FILL = PatternFill("solid", fgColor="1F4E78")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 NEGATIVE_FONT = Font(color="C00000")
+# Same thresholds as the Tiến độ page: late > 4 days red, 3-4 days at risk.
+LATE_LIMIT = 4
+LATE_RISK_FROM = 3
+LATE_FILL = PatternFill("solid", fgColor="FEE2E2")
+RISK_FILL = PatternFill("solid", fgColor="FEF3C7")
 THIN = Side(style="thin", color="BFBFBF")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
@@ -91,6 +96,11 @@ def generate_progress_excel(orders: list[dict], today: date) -> BytesIO:
                 cell.border = BORDER
                 if field == "pack_cut" and isinstance(value, int) and value < 0:
                     cell.font = NEGATIVE_FONT
+                late = o.get("late")
+                if isinstance(late, int) and late > LATE_LIMIT:
+                    cell.fill = LATE_FILL
+                elif isinstance(late, int) and late >= LATE_RISK_FROM:
+                    cell.fill = RISK_FILL
         ws.freeze_panes = "D2"
         ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{max(ws.max_row, 1)}"
 

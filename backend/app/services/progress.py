@@ -2,8 +2,8 @@
 "bảng tiến độ" Excel trackers (by the agent in progress-agent/ on an office
 PC that syncs the SharePoint folder), replacing the hand-made "daily" file.
 
-An order is shown when its Pack-cut is not 0, or it has a Cut qty but no
-Sew qty yet (is_running_order), unless someone closed it by hand ("Đóng
+An order is shown when it has no End pack yet and its Pack-cut is not 0, or
+it has a Cut qty but no Sew qty yet (is_running_order), unless someone closed it by hand ("Đóng
 đơn", kept in ProgressNote) - e.g. junk rows a tracker never cleans up. The
 agent applies the first rule too, to keep the upload small; line name
 clean-up, which Executive
@@ -123,8 +123,14 @@ def late_days(end_sew: str | None, end_pack: str | None, today: date) -> tuple[i
     return networkdays_mon_sat(sew, pack) - 1, None
 
 
-def is_running_order(pack_cut: int | None, cut_qty: int | None, sew_qty: int | None) -> bool:
-    """Pack-cut khác 0, or cut has started but nothing is sewn yet."""
+def is_running_order(
+    pack_cut: int | None, cut_qty: int | None, sew_qty: int | None, end_pack: str | None = None
+) -> bool:
+    """Not packed out yet (End pack empty - a date or "done"/"d" both count
+    as finished, even with Pack-cut still off), and either Pack-cut khác 0
+    or cut has started but nothing is sewn yet."""
+    if end_pack:
+        return False
     return bool(pack_cut) or (bool(cut_qty) and cut_qty > 0 and not sew_qty)
 
 
@@ -176,7 +182,8 @@ def ingest(db: Session, payload, now: datetime) -> dict:
         for r in item.rows:
             jo = _clean_text(r.jo, ORDER_TEXT_LIMITS["jo"])
             pack_cut = _clean_int(r.pack_cut) or 0
-            if not jo or not r.line or not is_running_order(pack_cut, _clean_int(r.cut_qty), _clean_int(r.sew_qty)):
+            end_pack = _clean_text(r.end_pack, ORDER_TEXT_LIMITS["end_pack"])
+            if not jo or not r.line or not is_running_order(pack_cut, _clean_int(r.cut_qty), _clean_int(r.sew_qty), end_pack):
                 continue
             line_number = normalize_line(r.line)
             color = _clean_text(r.color, ORDER_TEXT_LIMITS["color"])
@@ -317,6 +324,10 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
     closed_count = 0
     for o in db.scalars(select(ProgressOrder)).all():
         if allowed is not None and o.line_number not in allowed:
+            continue
+        # Ingest already drops packed-out orders; this also covers rows
+        # stored before that rule existed, until the next upload.
+        if o.end_pack:
             continue
         note = notes.get(o.order_key)
         is_closed = note is not None and note.is_closed
