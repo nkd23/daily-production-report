@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import PLACEHOLDER_SECRET_PREFIXES, get_settings
 from app.database import SessionLocal
-from app.routers import auth, dashboard, export, lines, progress, reports, targets, users
+from app.routers import auth, close_order, dashboard, export, lines, progress, reports, targets, users
 from app.services.retention import purge_old_reports
 
 settings = get_settings()
@@ -71,6 +71,7 @@ app.include_router(dashboard.router)
 app.include_router(export.router)
 app.include_router(targets.router)
 app.include_router(progress.router)
+app.include_router(close_order.router)
 
 
 @app.get("/api/health")

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExt
 import { Archive, ArchiveRestore, Download, Info, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
+import { ProgressTabs } from "@/components/ProgressTabs";
 import { Badge, Button, Card, Input, Select } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -606,6 +607,7 @@ function ProgressContent() {
         </>
       }
     >
+      <ProgressTabs />
       {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
 
       {data ? (
@@ -741,7 +743,7 @@ function ProgressContent() {
       {!data && !error ? <p className="text-sm text-muted">Đang tải...</p> : null}
       {data && data.orders.length === 0 ? (
         <Card className="p-6 text-sm text-muted">
-          Chưa có dữ liệu tiến độ. Dữ liệu được máy văn phòng gửi lên mỗi sáng lúc 9:30.
+          Chưa có dữ liệu tiến độ. Dữ liệu được máy văn phòng gửi lên mỗi sáng lúc 9:00.
         </Card>
       ) : null}
       {data && data.orders.length > 0 && filtered.length === 0 ? (
@@ -764,7 +766,7 @@ function ProgressContent() {
 
 export default function ProgressPage() {
   return (
-    <RequireRole roles={["thu_ky", "sep", "executive"]}>
+    <RequireRole roles={["thu_ky", "sep", "executive", "finishing"]}>
       <ProgressContent />
     </RequireRole>
   );

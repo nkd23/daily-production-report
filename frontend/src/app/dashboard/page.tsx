@@ -134,7 +134,7 @@ function DashboardContent() {
   // Excel export is a whole-company report - the backend only allows
   // thu_ky/sep to call it, so an Executive account (scoped to one person's
   // lines) never sees a button that would just 403.
-  const canExport = user?.role !== "executive";
+  const canExport = user?.role === "thu_ky" || user?.role === "sep";
   const [reportDate, setReportDate] = useSharedReportDate(yesterdayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -484,7 +484,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <RequireRole roles={["thu_ky", "sep", "executive"]}>
+    <RequireRole roles={["thu_ky", "sep", "executive", "finishing"]}>
       <DashboardContent />
     </RequireRole>
   );

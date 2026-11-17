@@ -108,3 +108,101 @@ def generate_progress_excel(orders: list[dict], today: date) -> BytesIO:
     wb.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+CLOSE_ORDER_COLUMNS = [
+    ("Executive", "executive_name", 14),
+    ("Line", "line_number", 8),
+    ("Byr", "buyer", 18),
+    ("JO", "jo", 16),
+    ("Order Qty", "order_qty", 10),
+    ("BPO date", "bpo_date", 11),
+    ("Exfty date", "exfty_date", 11),
+    ("CUT Qty", "cut_qty", 9),
+    ("SEW Qty", "sew_qty", 9),
+    ("PACK Qty", "pack_qty", 9),
+    ("Pack-Cut", "pack_cut", 9),
+    ("End Sew date", "end_sew", 12),
+    ("End Pack date", "end_pack", 12),
+    ("Late duration", "late_duration", 9),
+    ("Late", "is_late", 8),
+    ("WF& TAP 3 day", "wf", 9),
+    ("Remark", "remark", 28),
+    ("Department in charge", "department", 14),
+]
+LATE_ROW_FILL = PatternFill("solid", fgColor="FEE2E2")
+
+
+def _header(ws, labels_widths):
+    for c, (label, width) in enumerate(labels_widths, start=1):
+        cell = ws.cell(row=1, column=c, value=label)
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = BORDER
+        ws.column_dimensions[get_column_letter(c)].width = width
+
+
+def generate_close_order_excel(view: dict) -> BytesIO:
+    """The week in the old Close Order Report layout, plus a summary sheet
+    (per Executive: orders, on time, late, % on time, late by department)."""
+    wb = Workbook()
+    ws = wb.active
+    start, end = view["week_start"], view["week_end"]
+    ws.title = f"{start:%m.%d}-{end:%m.%d}"
+    _header(ws, [(label, width) for label, _, width in CLOSE_ORDER_COLUMNS])
+    for r, item in enumerate(view["items"], start=2):
+        for c, (_, field, _) in enumerate(CLOSE_ORDER_COLUMNS, start=1):
+            value = item.get(field)
+            if field == "executive_name" and value is None:
+                value = UNASSIGNED_EXECUTIVE
+            elif field == "is_late":
+                value = "late" if value else "ontime"
+            elif field == "wf":
+                value = "WF" if value else None
+            cell = ws.cell(row=r, column=c)
+            if field in ("end_sew", "end_pack", "bpo_date", "exfty_date"):
+                parsed = value if isinstance(value, date) else parse_iso(value)
+                cell.value = parsed or value
+                if parsed:
+                    cell.number_format = "dd/mm/yyyy"
+            else:
+                cell.value = value
+            cell.border = BORDER
+            if item.get("is_late"):
+                cell.fill = LATE_ROW_FILL
+    ws.freeze_panes = "E2"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(CLOSE_ORDER_COLUMNS))}{max(ws.max_row, 1)}"
+
+    depts = view.get("departments") or []
+    summary = wb.create_sheet("Tổng hợp")
+    labels = ["Executive", "Tổng đơn", "Ontime", "Late", "% Ontime", *[f"Late - {d}" for d in depts], "Late - chưa ghi bộ phận"]
+    _header(summary, [(label, 14) for label in labels])
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in view["items"]:
+        groups[item.get("executive_name") or UNASSIGNED_EXECUTIVE].append(item)
+    names = sorted(groups, key=lambda n: (n == UNASSIGNED_EXECUTIVE, n))
+    rows = [(n, groups[n]) for n in names] + [("THV", view["items"])]
+    for r, (name, items) in enumerate(rows, start=2):
+        late = [i for i in items if i.get("is_late")]
+        values = [
+            name,
+            len(items),
+            len(items) - len(late),
+            len(late),
+            (len(items) - len(late)) / len(items) if items else None,
+            *[sum(1 for i in late if i.get("department") == d) for d in depts],
+            sum(1 for i in late if not i.get("department")),
+        ]
+        for c, value in enumerate(values, start=1):
+            cell = summary.cell(row=r, column=c, value=value)
+            cell.border = BORDER
+            if c == 5 and value is not None:
+                cell.number_format = "0.0%"
+            if name == "THV":
+                cell.font = Font(bold=True)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer

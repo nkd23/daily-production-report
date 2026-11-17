@@ -52,9 +52,22 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         if existing is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Tên đăng nhập đã tồn tại")
         user.username = payload.username
+    if payload.role is not None and payload.role != user.role:
+        # Tổ trưởng accounts are tied to their line, so they are not moved
+        # in or out of that role here.
+        if UserRole.to_truong in (payload.role, user.role):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không đổi vai trò từ/sang Tổ trưởng")
+        if payload.role == UserRole.executive and not (payload.executive_name or user.executive_name):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tài khoản Executive phải chọn đúng tên Executive (khớp với Cấu hình Line)",
+            )
+        user.role = payload.role
+        if payload.role != UserRole.executive:
+            user.executive_name = None
     if payload.full_name is not None:
         user.full_name = payload.full_name
-    if payload.executive_name is not None:
+    if payload.executive_name is not None and user.role == UserRole.executive:
         user.executive_name = payload.executive_name
     if payload.password is not None and payload.password != "":
         user.password_hash = hash_password(payload.password)

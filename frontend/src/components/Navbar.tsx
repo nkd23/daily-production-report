@@ -11,11 +11,11 @@ import type { UserRole } from "@/lib/types";
 const NAV_ITEMS: { href: string; label: string; shortLabel: string; icon: typeof LayoutDashboard; roles: UserRole[] }[] = [
   { href: "/to-truong", label: "Nhập sản lượng", shortLabel: "Nhập", icon: ClipboardList, roles: ["to_truong"] },
   { href: "/thu-ky", label: "Theo dõi", shortLabel: "Theo dõi", icon: ClipboardList, roles: ["thu_ky", "sep"] },
-  { href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep", "executive"] },
-  { href: "/bao-cao-tuan", label: "Báo cáo tuần", shortLabel: "Tuần", icon: CalendarRange, roles: ["thu_ky", "sep", "executive"] },
+  { href: "/dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, roles: ["thu_ky", "sep", "executive", "finishing"] },
+  { href: "/bao-cao-tuan", label: "Báo cáo tuần", shortLabel: "Tuần", icon: CalendarRange, roles: ["thu_ky", "sep", "executive", "finishing"] },
   { href: "/target", label: "Target", shortLabel: "Target", icon: Crosshair, roles: ["thu_ky", "sep", "executive"] },
-  { href: "/tien-do", label: "Tiến độ", shortLabel: "Tiến độ", icon: PackageSearch, roles: ["thu_ky", "sep", "executive"] },
-  { href: "/du-lieu-san-xuat", label: "Dữ liệu sản xuất", shortLabel: "Dữ liệu", icon: Table2, roles: ["thu_ky", "sep", "executive"] },
+  { href: "/tien-do", label: "Tiến độ", shortLabel: "Tiến độ", icon: PackageSearch, roles: ["thu_ky", "sep", "executive", "finishing"] },
+  { href: "/du-lieu-san-xuat", label: "Dữ liệu sản xuất", shortLabel: "Dữ liệu", icon: Table2, roles: ["thu_ky", "sep", "executive", "finishing"] },
   { href: "/thu-ky/config", label: "Cấu hình Line", shortLabel: "Cấu hình", icon: Settings2, roles: ["thu_ky", "sep"] },
 ];
 
@@ -40,7 +40,7 @@ export function Navbar() {
 
           <nav className="hidden flex-1 items-center gap-1 overflow-x-auto lg:flex">
             {items.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || (item.href === "/tien-do" && pathname.startsWith("/tien-do/"));
               const Icon = item.icon;
               return (
                 <Link
@@ -95,7 +95,7 @@ export function Navbar() {
         >
           <div className="mx-auto flex max-w-xl">
             {items.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || (item.href === "/tien-do" && pathname.startsWith("/tien-do/"));
               const Icon = item.icon;
               return (
                 <Link

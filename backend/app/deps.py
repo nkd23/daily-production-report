@@ -46,7 +46,14 @@ require_sep_only = require_roles(UserRole.sep)
 require_any_role = require_roles(UserRole.to_truong, UserRole.thu_ky, UserRole.sep)
 # Dashboard/Dữ liệu sản xuất are the only pages an Executive account can see,
 # and only scoped to their own executive_name (see routers/dashboard.py).
-require_dashboard_viewer = require_roles(UserRole.thu_ky, UserRole.sep, UserRole.executive)
+# Finishing accounts see the same pages, for every line.
+require_dashboard_viewer = require_roles(UserRole.thu_ky, UserRole.sep, UserRole.executive, UserRole.finishing)
+# Targets are set by Executives (own lines) and Thư ký/Manager - not Finishing.
+require_target_editor = require_roles(UserRole.thu_ky, UserRole.sep, UserRole.executive)
+# Correct Tiến độ quantities and fill in the Close order report.
+require_finishing_editor = require_roles(UserRole.sep, UserRole.finishing)
+# Roles that only view production data and never enter/lock reports.
+VIEW_ONLY_ROLES = (UserRole.executive, UserRole.finishing)
 
 
 def local_now() -> datetime:

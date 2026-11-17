@@ -32,24 +32,31 @@ export function UserManagement({
   const [resetError, setResetError] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ username: "", full_name: "", executive_name: "" });
+  const [editForm, setEditForm] = useState({ username: "", full_name: "", executive_name: "", role: "to_truong" as UserRole });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
   function startEdit(user: User) {
     setEditingId(user.id);
-    setEditForm({ username: user.username, full_name: user.full_name, executive_name: user.executive_name ?? "" });
+    setEditForm({
+      username: user.username,
+      full_name: user.full_name,
+      executive_name: user.executive_name ?? "",
+      role: user.role,
+    });
     setEditError(null);
   }
 
-  async function handleSaveEdit(id: number, isExecutive: boolean) {
+  async function handleSaveEdit(id: number, isToTruong: boolean) {
     setEditSaving(true);
     setEditError(null);
     try {
       await api.updateUser(id, {
         username: editForm.username,
         full_name: editForm.full_name,
-        ...(isExecutive ? { executive_name: editForm.executive_name } : {}),
+        // Tổ trưởng accounts are tied to their line and keep their role.
+        ...(isToTruong ? {} : { role: editForm.role }),
+        ...(editForm.role === "executive" ? { executive_name: editForm.executive_name } : {}),
       });
       setEditingId(null);
       onChanged();
@@ -143,6 +150,7 @@ export function UserManagement({
             <option value="thu_ky">Thư ký</option>
             <option value="sep">Manager</option>
             <option value="executive">Executive</option>
+            <option value="finishing">Finishing</option>
           </Select>
         </div>
         {form.role === "executive" ? (
@@ -206,8 +214,28 @@ export function UserManagement({
                   </td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1.5">
-                      <Badge tone="primary">{roleLabel[u.role]}</Badge>
-                      {u.role === "executive" ? (
+                      {isEditing && u.role !== "to_truong" ? (
+                        <Select
+                          value={editForm.role}
+                          onChange={(e) => {
+                            const role = e.target.value as UserRole;
+                            setEditForm({
+                              ...editForm,
+                              role,
+                              executive_name: role === "executive" ? editForm.executive_name || executiveNames[0] || "" : "",
+                            });
+                          }}
+                          className="w-32"
+                        >
+                          <option value="thu_ky">Thư ký</option>
+                          <option value="sep">Manager</option>
+                          <option value="executive">Executive</option>
+                          <option value="finishing">Finishing</option>
+                        </Select>
+                      ) : (
+                        <Badge tone="primary">{roleLabel[u.role]}</Badge>
+                      )}
+                      {(isEditing ? editForm.role : u.role) === "executive" ? (
                         isEditing ? (
                           <Select
                             value={editForm.executive_name}
@@ -233,7 +261,7 @@ export function UserManagement({
                     {isEditing ? (
                       <div className="flex flex-col items-end gap-1">
                         <div className="flex items-center gap-1">
-                          <Button size="sm" disabled={editSaving} onClick={() => handleSaveEdit(u.id, u.role === "executive")}>
+                          <Button size="sm" disabled={editSaving} onClick={() => handleSaveEdit(u.id, u.role === "to_truong")}>
                             <Check size={14} /> {editSaving ? "Đang lưu..." : "Lưu"}
                           </Button>
                           <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>

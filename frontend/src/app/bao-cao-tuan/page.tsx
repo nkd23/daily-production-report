@@ -481,7 +481,7 @@ function WeeklyContent() {
 
 export default function WeeklyReportPage() {
   return (
-    <RequireRole roles={["thu_ky", "sep", "executive"]}>
+    <RequireRole roles={["thu_ky", "sep", "executive", "finishing"]}>
       <WeeklyContent />
     </RequireRole>
   );

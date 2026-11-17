@@ -1,6 +1,10 @@
 import type {
+  CloseOrderItem,
+  CloseOrderWeek,
+  CloseOrderWeekView,
   DailyReport,
   DailyReportInput,
+  Holiday,
   DashboardResponse,
   Line,
   LineTargetRow,
@@ -83,7 +87,14 @@ export const api = {
     request<User>("/api/users", { method: "POST", body: JSON.stringify(payload) }),
   updateUser: (
     id: number,
-    payload: Partial<{ username: string; full_name: string; password: string; executive_name: string; is_active: boolean }>
+    payload: Partial<{
+      role: UserRole;
+      username: string;
+      full_name: string;
+      password: string;
+      executive_name: string;
+      is_active: boolean;
+    }>
   ) =>
     request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteUser: (id: number) => request<void>(`/api/users/${id}`, { method: "DELETE" }),
@@ -137,6 +148,24 @@ export const api = {
     request<void>("/api/progress/numbers", { method: "PUT", body: JSON.stringify(payload) }),
   updateProgressNote: (payload: ProgressNoteUpdate) =>
     request<ProgressNote>("/api/progress/notes", { method: "PUT", body: JSON.stringify(payload) }),
+
+  listCloseOrderWeeks: () => request<CloseOrderWeek[]>("/api/close-order/weeks"),
+  getCloseOrderWeek: (weekStart: string) => request<CloseOrderWeekView>(`/api/close-order?week_start=${weekStart}`),
+  updateCloseOrderItem: (id: number, patch: { wf?: boolean | null; remark?: string; department?: string }) =>
+    request<CloseOrderItem>(`/api/close-order/items/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
+  listHolidays: () => request<Holiday[]>("/api/close-order/holidays"),
+  addHoliday: (day: string, name: string) =>
+    request<Holiday>("/api/close-order/holidays", { method: "POST", body: JSON.stringify({ day, name }) }),
+  deleteHoliday: (id: number) => request<void>(`/api/close-order/holidays/${id}`, { method: "DELETE" }),
+
+  async downloadCloseOrderExcel(weekStart: string) {
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/close-order/excel?week_start=${weekStart}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(res.status, "Không xuất được file Excel");
+    saveBlob(await res.blob(), `CloseOrder_${weekStart.replace(/-/g, "")}.xlsx`);
+  },
 
   async downloadProgressExcel() {
     const token = getToken();

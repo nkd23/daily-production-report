@@ -212,7 +212,7 @@ const WIP_REASON_OPTIONS = [
 
 function DuLieuSanXuatContent() {
   const { user } = useAuth();
-  const canExport = user?.role !== "executive";
+  const canExport = user?.role === "thu_ky" || user?.role === "sep";
   const [reportDate, setReportDate] = useSharedReportDate(todayISO());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -445,7 +445,7 @@ function DuLieuSanXuatContent() {
 
 export default function DuLieuSanXuatPage() {
   return (
-    <RequireRole roles={["thu_ky", "sep", "executive"]}>
+    <RequireRole roles={["thu_ky", "sep", "executive", "finishing"]}>
       <DuLieuSanXuatContent />
     </RequireRole>
   );

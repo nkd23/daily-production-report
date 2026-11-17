@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
+from app.deps import VIEW_ONLY_ROLES, get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
 from app.models import DailyReport, Line, ReportHistory, User, UserRole
 from app.services.targets import entry_defaults, resolve_target
 from app.schemas import (
@@ -120,8 +120,8 @@ def _assert_line_access(current_user: User, line: Line):
     # Executive accounts are Dashboard/Dữ liệu sản xuất viewers only (see
     # routers/dashboard.py) - nothing in this router (entry form, target
     # edits, submission history, delete) is theirs to touch.
-    if current_user.role == UserRole.executive:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Executive chỉ có quyền xem Dashboard")
+    if current_user.role in VIEW_ONLY_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản này chỉ có quyền xem Dashboard")
     if current_user.role == UserRole.to_truong and line.to_truong_user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không phụ trách line này")
 
@@ -148,8 +148,8 @@ def get_my_lines(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role == UserRole.executive:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Executive chỉ có quyền xem Dashboard")
+    if current_user.role in VIEW_ONLY_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tài khoản này chỉ có quyền xem Dashboard")
     stmt = select(Line).where(Line.is_active == True)  # noqa: E712
     if current_user.role == UserRole.to_truong:
         stmt = stmt.where(Line.to_truong_user_id == current_user.id)

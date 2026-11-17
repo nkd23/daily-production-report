@@ -385,7 +385,7 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
     return {
         "updated_at": last_run,
         "closed_count": closed_count,
-        "can_edit_numbers": user.role == UserRole.sep,
+        "can_edit_numbers": user.role in (UserRole.sep, UserRole.finishing),
         "sources": [
             {
                 "file_name": s.file_name,

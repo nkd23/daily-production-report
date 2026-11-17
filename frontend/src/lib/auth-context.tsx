@@ -61,6 +61,7 @@ export const roleLabel: Record<User["role"], string> = {
   thu_ky: "Thư ký",
   sep: "Manager",
   executive: "Executive",
+  finishing: "Finishing",
 };
 
 export const roleHomePath: Record<User["role"], string> = {
@@ -68,4 +69,5 @@ export const roleHomePath: Record<User["role"], string> = {
   thu_ky: "/thu-ky",
   sep: "/dashboard",
   executive: "/dashboard",
+  finishing: "/tien-do/close-order",
 };

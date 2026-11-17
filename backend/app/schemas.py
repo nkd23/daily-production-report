@@ -42,6 +42,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    role: UserRole | None = None
     username: str | None = None
     full_name: str | None = None
     password: str | None = None
@@ -503,3 +504,133 @@ class ProgressResponse(BaseModel):
     can_edit_numbers: bool
     sources: list[ProgressSourceOut]
     orders: list[ProgressOrderOut]
+
+
+# ---------- Close order ----------
+class CloseOrderRowIn(BaseModel):
+    line: str | None = None
+    buyer: str | None = None
+    jo: str | None = None
+    color: str | None = None
+    bpo_date: str | None = None
+    shipment_plan: str | None = None
+    end_sew: str | None = None
+    end_pack: str | None = None
+    order_qty: float | None = None
+    cut_qty: float | None = None
+    sew_qty: float | None = None
+    pack_qty: float | None = None
+    pack_cut: float | None = None
+    product_category: str | None = None
+
+
+class CloseOrderSourceIn(BaseModel):
+    file_name: str = Field(min_length=1)
+    modified_at: datetime | None = None
+    error: str | None = None
+    rows: list[CloseOrderRowIn] = Field(default_factory=list, max_length=50000)
+
+
+class CloseOrderIngest(BaseModel):
+    agent_version: str | None = None
+    sources: list[CloseOrderSourceIn] = Field(max_length=200)
+
+
+class CloseOrderImportItem(BaseModel):
+    line: str | None = None
+    buyer: str | None = None
+    jo: str | None = None
+    order_qty: float | None = None
+    bpo_date: str | None = None
+    exfty_date: str | None = None
+    cut_qty: float | None = None
+    sew_qty: float | None = None
+    pack_qty: float | None = None
+    pack_cut: float | None = None
+    end_sew: str | None = None
+    end_pack: str | None = None
+    wf: bool = False
+    remark: str | None = None
+    department: str | None = None
+
+
+class CloseOrderImportWeek(BaseModel):
+    week_start: date
+    items: list[CloseOrderImportItem] = Field(max_length=2000)
+
+
+class CloseOrderImport(BaseModel):
+    weeks: list[CloseOrderImportWeek] = Field(max_length=200)
+
+
+class CloseOrderWeekOut(BaseModel):
+    week_start: date
+    week_end: date
+    published_at: datetime
+    imported: bool
+    total: int
+    late: int
+
+
+class CloseOrderItemOut(BaseModel):
+    id: int
+    line_number: str
+    executive_name: str | None
+    pu_group: str | None
+    buyer: str | None
+    jo: str
+    color_count: int | None
+    order_qty: int | None
+    cut_qty: int | None
+    sew_qty: int | None
+    pack_qty: int | None
+    pack_cut: int | None
+    bpo_date: str | None
+    exfty_date: str | None
+    end_sew: date
+    # ISO date, "Done", or None while a colour is still unpacked.
+    end_pack: str | None
+    late_duration: int | None
+    is_late: bool
+    wf: bool
+    # True when WF & TAP was set explicitly (Finishing, or the old report)
+    # rather than taken from Product Category WWF_T.
+    wf_manual: bool
+    product_category: str | None
+    remark: str | None
+    department: str | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class CloseOrderWeekView(BaseModel):
+    week_start: date
+    week_end: date
+    published_at: datetime
+    imported: bool
+    source_errors: list[str]
+    can_edit: bool
+    can_edit_holidays: bool
+    departments: list[str]
+    items: list[CloseOrderItemOut]
+
+
+class CloseOrderItemUpdate(BaseModel):
+    """Finishing's fields; only those sent change. wf=None = automatic."""
+
+    wf: bool | None = None
+    remark: str | None = Field(default=None, max_length=1000)
+    department: str | None = Field(default=None, max_length=30)
+
+
+class HolidayIn(BaseModel):
+    day: date
+    name: str | None = Field(default=None, max_length=100)
+
+
+class HolidayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    day: date
+    name: str | None

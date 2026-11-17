@@ -1,12 +1,14 @@
-"""Đẩy bảng tiến độ lên web - chạy trên máy văn phòng lúc 9:30 mỗi sáng.
+"""Đẩy bảng tiến độ lên web - chạy trên máy văn phòng lúc 9:00 mỗi sáng.
 
 Đọc mọi file "bảng tiến độ" (.xlsx/.xlsm) trong thư mục SharePoint đã đồng
 bộ về máy bằng OneDrive, giữ các dòng có Pack-cut khác 0 hoặc đã có Cut mà
 chưa có Sew, tra WF và Cust. Style No trong file THV PRODUCTION PLAN mới nhất, rồi gửi lên web
 (POST /api/progress/ingest). Cài đặt nằm trong config.ini cạnh file .exe.
 
-    DayTienDo.exe          chạy bình thường (đọc + gửi)
-    DayTienDo.exe --thu    chỉ đọc, ghi kết quả ra thu_nghiem.json, không gửi
+    DayTienDo.exe                  chạy bình thường (đọc + gửi tab Tiến độ)
+    DayTienDo.exe --close-order    gửi số End sew/End pack cho tab Close order
+                                   (chạy 15:00 thứ 5 hằng tuần)
+    thêm --thu                     chỉ đọc, ghi kết quả ra file .json, không gửi
 
 Chỉ đọc file - không bao giờ sửa file Excel của ai."""
 
@@ -19,11 +21,11 @@ import unicodedata
 import urllib.error
 import urllib.request
 import warnings
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import openpyxl
 
-VERSION = "1.1"
+VERSION = "1.2"
 TRACKER_SHEET = "bảng tiến độ"
 PLAN_SHEET = "Plan"
 
@@ -51,6 +53,14 @@ COLOR_HEADERS = {"color", "màu", "mau"}
 CUST_STYLE_HEADERS = {"cust style no", "cust. style no", "cust.style no"}
 DATE_FIELDS = {"bpo_date", "shipment_plan", "order_carton", "start_sew", "end_sew", "end_pack"}
 NUMBER_FIELDS = {"order_qty", "allocate_qty", "cut_qty", "sew_qty", "pack_qty", "pack_cut"}
+# Close order: every colour row of a JO whose End sew falls in this many
+# recent days is sent (the web needs all colours to tell whether the whole
+# JO is sewn); older JOs closed long ago are left out.
+CLOSE_ORDER_DAYS = 120
+CLOSE_ORDER_FIELDS = (
+    "line", "buyer", "jo", "bpo_date", "shipment_plan", "end_sew", "end_pack",
+    "order_qty", "cut_qty", "sew_qty", "pack_qty", "pack_cut",
+)
 
 
 def base_dir() -> str:
@@ -65,7 +75,7 @@ LOG_PATH = os.path.join(base_dir(), "DayTienDo.log")
 def log(msg: str) -> None:
     line = f"{datetime.now():%Y-%m-%d %H:%M:%S}  {msg}"
     # The .exe is built without a console window (so nothing pops up on the
-    # office PC at 9:30) - then there is no stdout and the log file is all.
+    # office PC at 9:00) - then there is no stdout and the log file is all.
     if sys.stdout is not None:
         try:
             print(line)
@@ -175,7 +185,9 @@ def _find_sheet(wb):
     raise ValueError(f'Không thấy sheet "{TRACKER_SHEET}"')
 
 
-def read_tracker(path: str, plan: dict) -> list[dict]:
+def read_tracker(path: str, plan: dict, close_order: bool = False) -> list[dict]:
+    """Rows for the Tiến độ tab (running orders), or with close_order=True
+    every row with a JO, reduced to what the Close order tab needs."""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
         ws = _find_sheet(wb)
@@ -200,6 +212,23 @@ def read_tracker(path: str, plan: dict) -> list[dict]:
             jo = _text(cell(cols["jo"]))
             if not jo:
                 continue
+            color = next((c for c in (_text(cell(i)) for i in color_cols) if c), None)
+            if close_order:
+                item = {}
+                for field in CLOSE_ORDER_FIELDS:
+                    i = cols.get(field)
+                    value = cell(i) if i is not None else None
+                    if field in DATE_FIELDS:
+                        item[field] = _date_text(value)
+                    elif field in NUMBER_FIELDS:
+                        item[field] = _number(value)
+                    else:
+                        item[field] = _text(value)
+                item["color"] = color
+                # WF & TAP orders are the WWF_T product category.
+                item["product_category"] = plan.get(jo.upper(), (None, None))[0]
+                out.append(item)
+                continue
             pack_cut = _number(cell(cols["pack_cut"]))
             cut = _number(cell(cols["cut_qty"])) if "cut_qty" in cols else None
             sew = _number(cell(cols["sew_qty"])) if "sew_qty" in cols else None
@@ -217,7 +246,7 @@ def read_tracker(path: str, plan: dict) -> list[dict]:
                 else:
                     item[field] = _text(value)
             # Some trackers have two colour columns with only one filled in.
-            item["color"] = next((c for c in (_text(cell(i)) for i in color_cols) if c), None)
+            item["color"] = color
             cat, cust = plan.get(jo.upper(), (None, None))
             tracker_cust = next((c for c in (_text(cell(i)) for i in cust_cols) if c), None)
             item["product_category"] = cat
@@ -228,7 +257,17 @@ def read_tracker(path: str, plan: dict) -> list[dict]:
         wb.close()
 
 
-def collect(folder: str, plan_folder: str) -> dict:
+def _recent_close_order_jos(sources: list[dict]) -> set[str]:
+    cutoff = (date.today() - timedelta(days=CLOSE_ORDER_DAYS)).isoformat()
+    return {
+        r["jo"].upper()
+        for s in sources
+        for r in s["rows"]
+        if r.get("end_sew") and len(r["end_sew"]) == 10 and r["end_sew"] >= cutoff
+    }
+
+
+def collect(folder: str, plan_folder: str, close_order: bool = False) -> dict:
     plan_file, plan_modified, plan, plan_error = read_plan(plan_folder)
     if plan_error:
         log(f"PLAN: {plan_error}")
@@ -248,12 +287,22 @@ def collect(folder: str, plan_folder: str) -> dict:
         modified = datetime.fromtimestamp(os.path.getmtime(path)).isoformat(timespec="seconds")
         source = {"file_name": name, "modified_at": modified, "error": None, "rows": []}
         try:
-            source["rows"] = read_tracker(path, plan)
-            log(f"  {name}: {len(source['rows'])} đơn")
+            source["rows"] = read_tracker(path, plan, close_order)
+            if not close_order:
+                log(f"  {name}: {len(source['rows'])} đơn")
         except Exception as exc:  # noqa: BLE001 - one broken file must not stop the rest
             source["error"] = f"{type(exc).__name__}: {exc}"
             log(f"  {name}: LỖI {source['error']}")
         sources.append(source)
+
+    if close_order:
+        # Kept across all files: a JO's colours may sit in different trackers.
+        recent = _recent_close_order_jos(sources)
+        for source in sources:
+            source["rows"] = [r for r in source["rows"] if r["jo"].upper() in recent]
+            if not source["error"]:
+                log(f"  {source['file_name']}: {len(source['rows'])} dòng")
+        return {"agent_version": VERSION, "sources": sources}
 
     return {
         "agent_version": VERSION,
@@ -265,9 +314,9 @@ def collect(folder: str, plan_folder: str) -> dict:
     }
 
 
-def send(api: str, key: str, payload: dict) -> dict:
+def send(api: str, key: str, payload: dict, path: str = "/api/progress/ingest") -> dict:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    url = api.rstrip("/") + "/api/progress/ingest"
+    url = api.rstrip("/") + path
     last_error = None
     for attempt in range(1, 4):
         req = urllib.request.Request(
@@ -298,6 +347,7 @@ def main() -> int:
         pass
     warnings.filterwarnings("ignore")
     dry_run = "--thu" in sys.argv[1:]
+    close_order = "--close-order" in sys.argv[1:]
     cfg_path = os.path.join(base_dir(), "config.ini")
     cfg = configparser.ConfigParser()
     if not cfg.read(cfg_path, encoding="utf-8") or "tien_do" not in cfg:
@@ -315,14 +365,14 @@ def main() -> int:
         log(f"Không thấy thư mục PRODUCTION PLAN: {plan_folder}")
         return 2
 
-    log(f"Bắt đầu đọc {folder}")
-    payload = collect(folder, plan_folder)
+    log(f"Bắt đầu đọc {folder}" + (" (Close order)" if close_order else ""))
+    payload = collect(folder, plan_folder, close_order)
     total = sum(len(s["rows"]) for s in payload["sources"])
     errors = sum(1 for s in payload["sources"] if s["error"])
-    log(f"Đọc xong {len(payload['sources'])} file, {total} đơn, {errors} file lỗi")
+    log(f"Đọc xong {len(payload['sources'])} file, {total} {'dòng' if close_order else 'đơn'}, {errors} file lỗi")
 
     if dry_run:
-        out = os.path.join(base_dir(), "thu_nghiem.json")
+        out = os.path.join(base_dir(), "thu_nghiem_close_order.json" if close_order else "thu_nghiem.json")
         with open(out, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=1)
         log(f"Chạy thử: đã ghi {out}, không gửi lên web")
@@ -334,7 +384,7 @@ def main() -> int:
         log("config.ini thiếu api hoặc khoa")
         return 2
     try:
-        result = send(api, key, payload)
+        result = send(api, key, payload, "/api/close-order/ingest" if close_order else "/api/progress/ingest")
     except RuntimeError as exc:
         log(str(exc))
         return 1

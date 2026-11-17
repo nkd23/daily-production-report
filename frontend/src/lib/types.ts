@@ -1,4 +1,4 @@
-export type UserRole = "to_truong" | "thu_ky" | "sep" | "executive";
+export type UserRole = "to_truong" | "thu_ky" | "sep" | "executive" | "finishing";
 export type PuGroup = "PU1" | "PU2";
 
 export interface User {
@@ -365,4 +365,61 @@ export interface ProgressNote {
   is_closed: boolean;
   closed_by: string | null;
   closed_at: string | null;
+}
+
+// ---------- Close order ----------
+export interface CloseOrderWeek {
+  week_start: string;
+  week_end: string;
+  published_at: string;
+  imported: boolean;
+  total: number;
+  late: number;
+}
+
+export interface CloseOrderItem {
+  id: number;
+  line_number: string;
+  executive_name: string | null;
+  pu_group: PuGroup | null;
+  buyer: string | null;
+  jo: string;
+  color_count: number | null;
+  order_qty: number | null;
+  cut_qty: number | null;
+  sew_qty: number | null;
+  pack_qty: number | null;
+  pack_cut: number | null;
+  bpo_date: string | null;
+  exfty_date: string | null;
+  end_sew: string;
+  /** ISO date, "Done", or null while a colour is still unpacked. */
+  end_pack: string | null;
+  late_duration: number | null;
+  is_late: boolean;
+  wf: boolean;
+  wf_manual: boolean;
+  product_category: string | null;
+  remark: string | null;
+  department: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface CloseOrderWeekView {
+  week_start: string;
+  week_end: string;
+  published_at: string;
+  imported: boolean;
+  source_errors: string[];
+  can_edit: boolean;
+  can_edit_holidays: boolean;
+  departments: string[];
+  items: CloseOrderItem[];
+}
+
+export interface Holiday {
+  id: number;
+  day: string;
+  name: string | null;
 }

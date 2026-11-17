@@ -24,6 +24,9 @@ class UserRole(str, enum.Enum):
     thu_ky = "thu_ky"
     sep = "sep"
     executive = "executive"
+    # FIN (finishing) staff: view the dashboards, fill in the Close order
+    # report (WF/remark/department) and correct Tiến độ quantities.
+    finishing = "finishing"
 
 
 class PuGroup(str, enum.Enum):
@@ -292,3 +295,92 @@ class ProgressOverride(Base):
     base_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
     set_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     set_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
+
+
+class CloseOrderRow(Base):
+    """One colour row (Line + JO + màu) copied from a tracker by the agent's
+    weekly --close-order run (Thursday 15:00): only what the Close order
+    report needs. A tracker's rows are replaced on each successful read; a
+    tracker that fails keeps its previous rows."""
+
+    __tablename__ = "close_order_rows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_file: Mapped[str] = mapped_column(Unicode(255), nullable=False, index=True)
+    line_number: Mapped[str] = mapped_column(Unicode(20), nullable=False)
+    jo: Mapped[str] = mapped_column(Unicode(50), nullable=False)
+    color: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    bpo_date: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    shipment_plan: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    end_sew: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    end_pack: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    order_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cut_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sew_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_cut: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    product_category: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+
+
+class CloseOrderWeek(Base):
+    """A published Close order week (Monday week_start; End Sew Monday to
+    Saturday). Re-publishing the same week rebuilds only that week; weeks
+    imported from the old Excel report are kept as they were."""
+
+    __tablename__ = "close_order_weeks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week_start: Mapped["Date"] = mapped_column(Date, unique=True, nullable=False)
+    published_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
+    imported: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # "owner: error" lines for trackers that could not be read on that run.
+    source_errors: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+
+
+class CloseOrderItem(Base):
+    """One closed order (Line + JO, all colours sewn) in the week its last
+    colour finished sewing; quantities are the colours added up, as in the
+    old Close Order Report. Quantities/End pack are refreshed on every
+    weekly run; wf/remark/department are filled in by Finishing.
+
+    A JO reported in an earlier week is not reported again (any line)."""
+
+    __tablename__ = "close_order_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week_start: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
+    line_number: Mapped[str] = mapped_column(Unicode(20), nullable=False)
+    jo: Mapped[str] = mapped_column(Unicode(50), nullable=False, index=True)
+    buyer: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    color_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    order_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cut_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sew_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pack_cut: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bpo_date: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    exfty_date: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    end_sew: Mapped["Date"] = mapped_column(Date, nullable=False)
+    # ISO date of the last colour's End pack, "Done" when the tracker only
+    # says done, or None while any colour is still unpacked.
+    end_pack: Mapped[str | None] = mapped_column(Unicode(40), nullable=True)
+    product_category: Mapped[str | None] = mapped_column(Unicode(50), nullable=True)
+    # WF & TAP (3 days allowed): None = automatic (Product Category WWF_T).
+    wf: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    department: Mapped[str | None] = mapped_column(Unicode(30), nullable=True)
+    source: Mapped[str] = mapped_column(Unicode(10), nullable=False, default="web")
+    updated_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    updated_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+
+
+class Holiday(Base):
+    """Days off besides Sundays, left out of the Close order Late duration.
+    Managed by Manager accounts on the Close order page."""
+
+    __tablename__ = "holidays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    day: Mapped["Date"] = mapped_column(Date, unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)

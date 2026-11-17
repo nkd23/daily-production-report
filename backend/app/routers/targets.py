@@ -5,13 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import local_today, require_dashboard_viewer
+from app.deps import local_today, require_target_editor
 from app.models import Line, User, UserRole
 from app.schemas import LineTargetRow, LineTargetSet
 from app.services.targets import set_target, target_info
 
 # Thư ký / Manager manage every line's target; an Executive only their own
-# lines'. Tổ trưởng have no access at all (require_dashboard_viewer excludes them).
+# lines'. Tổ trưởng and Finishing have no access (require_target_editor).
 router = APIRouter(prefix="/api/targets", tags=["targets"])
 
 
@@ -35,7 +35,7 @@ def _row(db: Session, line: Line, day: date) -> LineTargetRow:
 @router.get("", response_model=list[LineTargetRow])
 def list_targets(
     as_of: date = Query(default_factory=local_today),
-    current_user: User = Depends(require_dashboard_viewer),
+    current_user: User = Depends(require_target_editor),
     db: Session = Depends(get_db),
 ):
     """Target in force on `as_of` for every line the user manages."""
@@ -46,7 +46,7 @@ def list_targets(
 def update_target(
     line_id: int,
     payload: LineTargetSet,
-    current_user: User = Depends(require_dashboard_viewer),
+    current_user: User = Depends(require_target_editor),
     db: Session = Depends(get_db),
 ):
     line = db.get(Line, line_id)
