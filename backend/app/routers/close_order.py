@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.deps import local_now, local_today, require_dashboard_viewer, require_finishing_editor, require_sep_only
-from app.models import CloseOrderItem, Holiday, User
+from app.models import CloseOrderItem, Holiday, User, UserRole
 from app.schemas import (
     CloseOrderImport,
     CloseOrderIngest,
@@ -103,8 +103,24 @@ def update_item(
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy đơn")
     sent = payload.model_fields_set
+    # Overriding the late result or dropping an order is Finishing's call
+    # alone; Managers can still fill in WF / remark / department.
+    if sent & {"late_duration", "is_late", "removed"} and current_user.role != UserRole.finishing:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ tài khoản Finishing được sửa Late hoặc xóa đơn",
+        )
+    now = local_now().replace(tzinfo=None)
     if "wf" in sent:
         item.wf = payload.wf
+    if "late_duration" in sent:
+        item.duration_override = payload.late_duration
+    if "is_late" in sent:
+        item.late_override = payload.is_late
+    if "removed" in sent and payload.removed is not None and payload.removed != item.is_removed:
+        item.is_removed = payload.removed
+        item.removed_by = current_user.full_name if payload.removed else None
+        item.removed_at = now if payload.removed else None
     if "remark" in sent:
         item.remark = (payload.remark or "").strip() or None
     if "department" in sent:
@@ -113,7 +129,7 @@ def update_item(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bộ phận không hợp lệ")
         item.department = dept
     item.updated_by = current_user.full_name
-    item.updated_at = local_now().replace(tzinfo=None)
+    item.updated_at = now
     db.commit()
     return item_out(item, _line_map(db), local_today(), holiday_set(db))
 

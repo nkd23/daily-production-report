@@ -590,8 +590,18 @@ class CloseOrderItemOut(BaseModel):
     end_sew: date
     # ISO date, "Done", or None while a colour is still unpacked.
     end_pack: str | None
+    # Effective values (Finishing's when set, else the formula's) and the
+    # formula's own, shown alongside when overridden.
     late_duration: int | None
     is_late: bool
+    auto_late_duration: int | None
+    auto_is_late: bool
+    duration_manual: bool
+    late_manual: bool
+    # Removed from the report by Finishing; left out of every count/export.
+    is_removed: bool
+    removed_by: str | None
+    removed_at: datetime | None
     wf: bool
     # True when WF & TAP was set explicitly (Finishing, or the old report)
     # rather than taken from Product Category WWF_T.
@@ -610,15 +620,20 @@ class CloseOrderWeekView(BaseModel):
     imported: bool
     source_errors: list[str]
     can_edit: bool
+    can_override: bool
     can_edit_holidays: bool
     departments: list[str]
     items: list[CloseOrderItemOut]
 
 
 class CloseOrderItemUpdate(BaseModel):
-    """Finishing's fields; only those sent change. wf=None = automatic."""
+    """Finishing's fields; only those sent change. wf / late_duration /
+    is_late = None go back to the formula."""
 
     wf: bool | None = None
+    late_duration: int | None = Field(default=None, ge=0, le=365)
+    is_late: bool | None = None
+    removed: bool | None = None
     remark: str | None = Field(default=None, max_length=1000)
     department: str | None = Field(default=None, max_length=30)
 

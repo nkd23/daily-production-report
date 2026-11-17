@@ -395,8 +395,16 @@ export interface CloseOrderItem {
   end_sew: string;
   /** ISO date, "Done", or null while a colour is still unpacked. */
   end_pack: string | null;
+  /** Effective values: Finishing's when set by hand, else the formula's. */
   late_duration: number | null;
   is_late: boolean;
+  auto_late_duration: number | null;
+  auto_is_late: boolean;
+  duration_manual: boolean;
+  late_manual: boolean;
+  is_removed: boolean;
+  removed_by: string | null;
+  removed_at: string | null;
   wf: boolean;
   wf_manual: boolean;
   product_category: string | null;
@@ -413,6 +421,8 @@ export interface CloseOrderWeekView {
   imported: boolean;
   source_errors: string[];
   can_edit: boolean;
+  /** Finishing only: change Late duration / late-ontime and remove orders. */
+  can_override: boolean;
   can_edit_holidays: boolean;
   departments: string[];
   items: CloseOrderItem[];

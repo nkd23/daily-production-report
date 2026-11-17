@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Download,
+  RotateCcw,
   Info,
   Percent,
   Search,
@@ -18,7 +19,7 @@ import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
 import { ProgressTabs } from "@/components/ProgressTabs";
 import { Badge, Button, Card, Input, Select, StatCard } from "@/components/ui";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type CloseOrderPatch } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { execColor } from "@/lib/exec-colors";
 import type { CloseOrderItem, CloseOrderWeek, CloseOrderWeekView, Holiday } from "@/lib/types";
@@ -225,6 +226,76 @@ function RemarkInput({ value, onSave }: { value: string | null; onSave: (text: s
   );
 }
 
+/** Late duration cell: blank = back to the formula. */
+function DurationInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: number | null) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const cancelled = useRef(false);
+
+  async function commit() {
+    if (cancelled.current) {
+      cancelled.current = false;
+      setEditing(false);
+      return;
+    }
+    const text = draft.trim();
+    if (text !== "" && !/^\d{1,3}$/.test(text)) {
+      alert("Nhập số ngày (số nguyên từ 0), hoặc để trống để tính theo công thức.");
+      return;
+    }
+    const next = text === "" ? null : Number(text);
+    const current = item.duration_manual ? item.late_duration : null;
+    if (next !== current) {
+      try {
+        await onSave(next);
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : "Không lưu được");
+        return;
+      }
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-14 rounded border border-primary bg-surface px-1 py-0.5 text-right text-xs outline-none ring-2 ring-primary/20"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(item.duration_manual && item.late_duration != null ? String(item.late_duration) : "");
+        setEditing(true);
+      }}
+      title={
+        item.duration_manual
+          ? `Sửa tay. Công thức tính: ${item.auto_late_duration ?? "-"} ngày. Bấm, xoá trống để trả về công thức.`
+          : "Bấm để sửa số ngày"
+      }
+      className={`min-w-[2rem] rounded px-1 text-right tabular-nums hover:bg-primary-soft/60 ${
+        item.duration_manual ? "bg-warning-soft font-semibold text-warning" : ""
+      }`}
+    >
+      {item.late_duration ?? "-"}
+    </button>
+  );
+}
+
 function HolidayPanel({ canEdit, onClose, onChanged }: { canEdit: boolean; onClose: () => void; onChanged: () => void }) {
   const [list, setList] = useState<Holiday[] | null>(null);
   const [day, setDay] = useState("");
@@ -322,6 +393,7 @@ function CloseOrderContent() {
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
   const [showHolidays, setShowHolidays] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   const loadWeeks = useCallback(() => {
     api
@@ -350,7 +422,9 @@ function CloseOrderContent() {
     if (weekStart) loadWeek(weekStart);
   }, [weekStart, loadWeek]);
 
-  const items = useMemo(() => view?.items ?? [], [view]);
+  // Orders Finishing removed stay out of every count, chart and export.
+  const items = useMemo(() => (view?.items ?? []).filter((i) => !i.is_removed), [view]);
+  const removedItems = useMemo(() => (view?.items ?? []).filter((i) => i.is_removed), [view]);
   const filtered = useMemo(
     () =>
       items.filter(
@@ -446,22 +520,32 @@ function CloseOrderContent() {
 
   const detail = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return filtered.filter(
+    return [...filtered, ...(showRemoved ? removedItems : [])].filter(
       (i) =>
         (!status || (status === "late") === i.is_late) &&
         (!q || [i.jo, i.buyer, i.line_number, i.remark].some((v) => v?.toLowerCase().includes(q)))
     );
-  }, [filtered, status, search]);
+  }, [filtered, removedItems, showRemoved, status, search]);
 
   const lines = useMemo(() => [...new Set(items.map((i) => i.line_number))].sort(), [items]);
   const buyers = useMemo(() => [...new Set(items.map((i) => i.buyer).filter(Boolean) as string[])].sort(), [items]);
   const execNames = useMemo(() => [...new Set(items.map(execOf))], [items]);
 
-  async function update(item: CloseOrderItem, patch: { wf?: boolean | null; remark?: string; department?: string }) {
+  async function update(item: CloseOrderItem, patch: CloseOrderPatch) {
     const updated = await api.updateCloseOrderItem(item.id, patch);
     setView((v) => (v ? { ...v, items: v.items.map((i) => (i.id === updated.id ? updated : i)) } : v));
-    // Late counts per week may have changed (WF changes the 3-day rule).
-    if (patch.wf !== undefined) loadWeeks();
+    // The weekly late counts (trend chart, week list) may have changed.
+    if (["wf", "late_duration", "is_late", "removed"].some((k) => k in patch)) loadWeeks();
+  }
+
+  function removeItem(i: CloseOrderItem) {
+    if (
+      !confirm(
+        `Xóa đơn ${i.jo} (line ${i.line_number}) khỏi báo cáo Close order tuần này? Đơn sẽ không còn được tính vào số liệu; xem lại và khôi phục được ở "Hiện đơn đã xóa".`
+      )
+    )
+      return;
+    update(i, { removed: true }).catch((err) => alert(err instanceof ApiError ? err.message : "Không xóa được"));
   }
 
   async function handleExport() {
@@ -481,6 +565,7 @@ function CloseOrderContent() {
   const prevPct = prevWeek && prevWeek.total ? (prevWeek.total - prevWeek.late) / prevWeek.total : null;
   const curPct = total ? ontime / total : null;
   const canEdit = view?.can_edit ?? false;
+  const canOverride = view?.can_override ?? false;
 
   return (
     <PageShell
@@ -804,7 +889,13 @@ function CloseOrderContent() {
           <Section
             id="chi-tiet"
             title="Chi tiết đơn hàng"
-            description={canEdit ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận và WF & TAP ngay trên bảng." : undefined}
+            description={
+              canOverride
+                ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận, WF & TAP, sửa Late duration hoặc Late/Ontime ngay trên bảng (ô màu vàng / dấu * là đã sửa tay). Nút Xóa bỏ đơn khỏi báo cáo, khôi phục được."
+                : canEdit
+                  ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận và WF & TAP ngay trên bảng. Ô màu vàng / dấu * là số Finishing đã sửa tay."
+                  : "Ô màu vàng / dấu * là số Finishing đã sửa tay."
+            }
           >
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <div className="relative min-w-[14rem] flex-1 sm:max-w-xs">
@@ -816,6 +907,12 @@ function CloseOrderContent() {
                 <option value="late">Chỉ Late</option>
                 <option value="ontime">Chỉ Ontime</option>
               </Select>
+              {removedItems.length && canOverride ? (
+                <label className="flex items-center gap-1.5 text-sm text-muted">
+                  <input type="checkbox" checked={showRemoved} onChange={(e) => setShowRemoved(e.target.checked)} />
+                  Hiện đơn đã xóa ({removedItems.length})
+                </label>
+              ) : null}
               <span className="ml-auto text-sm text-muted">{detail.length} đơn</span>
             </div>
             <Card className="overflow-hidden p-0">
@@ -841,11 +938,15 @@ function CloseOrderContent() {
                       <th className={TH}>WF &amp; TAP</th>
                       <th className={TH}>Remark</th>
                       <th className={TH}>Department</th>
+                      {canOverride ? <th className={TH} /> : null}
                     </tr>
                   </thead>
                   <tbody>
                     {detail.map((i) => (
-                      <tr key={i.id} className={i.is_late ? "bg-danger-soft/50" : ""}>
+                      <tr
+                        key={i.id}
+                        className={i.is_removed ? "text-muted line-through decoration-muted/50" : i.is_late ? "bg-danger-soft/50" : ""}
+                      >
                         <td className={TD}>{execOf(i)}</td>
                         <td className={`${TD} font-semibold`}>{i.line_number}</td>
                         <td className={`${TD} max-w-[9rem] truncate`} title={i.buyer ?? undefined}>
@@ -863,8 +964,38 @@ function CloseOrderContent() {
                         </td>
                         <td className={TD}>{ddmm(i.end_sew, true)}</td>
                         <td className={TD}>{i.end_pack ? ddmm(i.end_pack, true) : <Badge tone="warning">Chưa pack</Badge>}</td>
-                        <td className={`${TD} text-right tabular-nums`}>{i.late_duration ?? ""}</td>
-                        <td className={TD}>{i.is_late ? <Badge tone="danger">late</Badge> : <Badge tone="success">ontime</Badge>}</td>
+                        <td className={`${TD} text-right tabular-nums`}>
+                          {canOverride && !i.is_removed ? (
+                            <DurationInput item={i} onSave={(v) => update(i, { late_duration: v })} />
+                          ) : (
+                            <span className={i.duration_manual ? "font-semibold text-warning" : ""}>{i.late_duration ?? ""}</span>
+                          )}
+                        </td>
+                        <td className={TD}>
+                          {canOverride && !i.is_removed ? (
+                            <select
+                              value={i.late_manual ? (i.is_late ? "late" : "ontime") : "auto"}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                update(i, { is_late: v === "auto" ? null : v === "late" }).catch((err) =>
+                                  alert(err instanceof ApiError ? err.message : "Không lưu được")
+                                );
+                              }}
+                              title={i.late_manual ? `Sửa tay. Công thức tính: ${i.auto_is_late ? "late" : "ontime"}` : undefined}
+                              className={`rounded border px-1 py-0.5 text-xs font-medium ${
+                                i.is_late ? "border-danger/40 bg-danger-soft text-danger" : "border-success/40 bg-success-soft text-success"
+                              }`}
+                            >
+                              <option value="auto">Tự động ({i.duration_manual ? (i.is_late ? "late" : "ontime") : i.auto_is_late ? "late" : "ontime"})</option>
+                              <option value="late">late</option>
+                              <option value="ontime">ontime</option>
+                            </select>
+                          ) : i.is_late ? (
+                            <Badge tone="danger">late{i.late_manual ? "*" : ""}</Badge>
+                          ) : (
+                            <Badge tone="success">ontime{i.late_manual ? "*" : ""}</Badge>
+                          )}
+                        </td>
                         <td className={TD}>
                           {canEdit ? (
                             <select
@@ -919,6 +1050,33 @@ function CloseOrderContent() {
                             <span className="px-1">{i.department}</span>
                           )}
                         </td>
+                        {canOverride ? (
+                          <td className={`${TD} text-right no-underline`}>
+                            {i.is_removed ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  update(i, { removed: false }).catch((err) =>
+                                    alert(err instanceof ApiError ? err.message : "Không khôi phục được")
+                                  )
+                                }
+                                title={`Xóa bởi ${i.removed_by ?? "?"}${i.removed_at ? ` lúc ${dateTime(i.removed_at)}` : ""} - bấm để khôi phục`}
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-primary hover:bg-primary-soft"
+                              >
+                                <RotateCcw size={13} /> Khôi phục
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => removeItem(i)}
+                                title="Xóa đơn khỏi báo cáo (khôi phục được)"
+                                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted hover:bg-danger-soft hover:text-danger"
+                              >
+                                <Trash2 size={13} /> Xóa
+                              </button>
+                            )}
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>

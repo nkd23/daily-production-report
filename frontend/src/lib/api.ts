@@ -151,7 +151,7 @@ export const api = {
 
   listCloseOrderWeeks: () => request<CloseOrderWeek[]>("/api/close-order/weeks"),
   getCloseOrderWeek: (weekStart: string) => request<CloseOrderWeekView>(`/api/close-order?week_start=${weekStart}`),
-  updateCloseOrderItem: (id: number, patch: { wf?: boolean | null; remark?: string; department?: string }) =>
+  updateCloseOrderItem: (id: number, patch: CloseOrderPatch) =>
     request<CloseOrderItem>(`/api/close-order/items/${id}`, { method: "PUT", body: JSON.stringify(patch) }),
   listHolidays: () => request<Holiday[]>("/api/close-order/holidays"),
   addHoliday: (day: string, name: string) =>
@@ -196,5 +196,14 @@ function saveBlob(blob: Blob, filename: string) {
   a.remove();
   window.URL.revokeObjectURL(url);
 }
+
+export type CloseOrderPatch = {
+  wf?: boolean | null;
+  remark?: string;
+  department?: string;
+  late_duration?: number | null;
+  is_late?: boolean | null;
+  removed?: boolean;
+};
 
 export { API_URL };

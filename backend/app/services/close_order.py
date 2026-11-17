@@ -321,10 +321,25 @@ def _effective_wf(item: CloseOrderItem) -> bool:
     return (item.product_category or "").strip().upper() == WF_CATEGORY
 
 
+def effective_late(item: CloseOrderItem, today: date, holidays: set[date]) -> tuple[int | None, bool, int | None, bool]:
+    """(duration, late, formula duration, formula late). Finishing's own
+    duration feeds the late rule unless late/on time is also set by hand."""
+    wf = _effective_wf(item)
+    auto_duration, auto_late = late_status(item.end_sew, item.end_pack, wf, today, holidays)
+    duration = item.duration_override if item.duration_override is not None else auto_duration
+    if item.late_override is not None:
+        late = item.late_override
+    elif item.duration_override is not None:
+        late = duration > LATE_AFTER_DAYS or (duration == LATE_AFTER_DAYS and not wf)
+    else:
+        late = auto_late
+    return duration, late, auto_duration, auto_late
+
+
 def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date]) -> dict:
     line = lines.get(item.line_number)
     wf = _effective_wf(item)
-    duration, late = late_status(item.end_sew, item.end_pack, wf, today, holidays)
+    duration, late, auto_duration, auto_late = effective_late(item, today, holidays)
     return {
         "id": item.id,
         "line_number": item.line_number,
@@ -344,6 +359,13 @@ def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays
         "end_pack": item.end_pack,
         "late_duration": duration,
         "is_late": late,
+        "auto_late_duration": auto_duration,
+        "auto_is_late": auto_late,
+        "duration_manual": item.duration_override is not None,
+        "late_manual": item.late_override is not None,
+        "is_removed": item.is_removed,
+        "removed_by": item.removed_by,
+        "removed_at": item.removed_at,
         "wf": wf,
         # Set explicitly - by Finishing, or taken over from the old report.
         "wf_manual": item.wf is not None,
@@ -364,9 +386,9 @@ def list_weeks(db: Session, user: User, today: date) -> list[dict]:
     holidays = holiday_set(db)
     counts: dict[date, list[int]] = defaultdict(lambda: [0, 0])
     for item in db.scalars(select(CloseOrderItem)).all():
-        if allowed is not None and item.line_number not in allowed:
+        if item.is_removed or (allowed is not None and item.line_number not in allowed):
             continue
-        _, late = late_status(item.end_sew, item.end_pack, _effective_wf(item), today, holidays)
+        _, late, _, _ = effective_late(item, today, holidays)
         counts[item.week_start][0] += 1
         counts[item.week_start][1] += int(late)
     weeks = db.scalars(select(CloseOrderWeek).order_by(CloseOrderWeek.week_start.desc())).all()
@@ -403,6 +425,8 @@ def week_view(db: Session, user: User, week_start: date, today: date) -> dict | 
         "imported": week.imported,
         "source_errors": json.loads(week.source_errors) if week.source_errors else [],
         "can_edit": user.role in (UserRole.sep, UserRole.finishing),
+        # Late duration / late-ontime overrides and removing orders.
+        "can_override": user.role == UserRole.finishing,
         "can_edit_holidays": user.role == UserRole.sep,
         "departments": list(DEPARTMENTS),
         "items": items,

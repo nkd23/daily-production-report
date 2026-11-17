@@ -370,6 +370,16 @@ class CloseOrderItem(Base):
     wf: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     department: Mapped[str | None] = mapped_column(Unicode(30), nullable=True)
+    # Finishing's own call when the formula doesn't fit the case (None =
+    # use the formula): Late duration in days, and late/on time.
+    duration_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    late_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Taken out of the report by Finishing (e.g. the line asked to drop a
+    # late order). Kept, not deleted, so it can be restored and a re-run of
+    # the week doesn't add it back.
+    is_removed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    removed_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+    removed_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
     source: Mapped[str] = mapped_column(Unicode(10), nullable=False, default="web")
     updated_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     updated_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)

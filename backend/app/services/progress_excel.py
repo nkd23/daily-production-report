@@ -151,7 +151,8 @@ def generate_close_order_excel(view: dict) -> BytesIO:
     start, end = view["week_start"], view["week_end"]
     ws.title = f"{start:%m.%d}-{end:%m.%d}"
     _header(ws, [(label, width) for label, _, width in CLOSE_ORDER_COLUMNS])
-    for r, item in enumerate(view["items"], start=2):
+    items = [i for i in view["items"] if not i.get("is_removed")]
+    for r, item in enumerate(items, start=2):
         for c, (_, field, _) in enumerate(CLOSE_ORDER_COLUMNS, start=1):
             value = item.get(field)
             if field == "executive_name" and value is None:
@@ -179,10 +180,10 @@ def generate_close_order_excel(view: dict) -> BytesIO:
     labels = ["Executive", "Tổng đơn", "Ontime", "Late", "% Ontime", *[f"Late - {d}" for d in depts], "Late - chưa ghi bộ phận"]
     _header(summary, [(label, 14) for label in labels])
     groups: dict[str, list[dict]] = defaultdict(list)
-    for item in view["items"]:
+    for item in items:
         groups[item.get("executive_name") or UNASSIGNED_EXECUTIVE].append(item)
     names = sorted(groups, key=lambda n: (n == UNASSIGNED_EXECUTIVE, n))
-    rows = [(n, groups[n]) for n in names] + [("THV", view["items"])]
+    rows = [(n, groups[n]) for n in names] + [("THV", items)]
     for r, (name, items) in enumerate(rows, start=2):
         late = [i for i in items if i.get("is_late")]
         values = [
