@@ -373,6 +373,8 @@ export interface CloseOrderWeek {
   week_end: string;
   published_at: string;
   imported: boolean;
+  /** False = Thursday-morning draft, seen only by Finishing. */
+  is_published: boolean;
   total: number;
   late: number;
 }
@@ -419,6 +421,8 @@ export interface CloseOrderWeekView {
   week_end: string;
   published_at: string;
   imported: boolean;
+  /** False = Thursday-morning draft, seen only by Finishing. */
+  is_published: boolean;
   source_errors: string[];
   can_edit: boolean;
   /** Finishing only: change Late duration / late-ontime and remove orders. */

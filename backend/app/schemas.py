@@ -533,6 +533,8 @@ class CloseOrderSourceIn(BaseModel):
 
 class CloseOrderIngest(BaseModel):
     agent_version: str | None = None
+    # False for the Thursday 9:00 draft (Finishing only); True at 15:00.
+    publish: bool = True
     sources: list[CloseOrderSourceIn] = Field(max_length=200)
 
 
@@ -568,6 +570,7 @@ class CloseOrderWeekOut(BaseModel):
     week_end: date
     published_at: datetime
     imported: bool
+    is_published: bool
     total: int
     late: int
 
@@ -599,6 +602,7 @@ class CloseOrderItemOut(BaseModel):
     duration_manual: bool
     late_manual: bool
     # Removed from the report by Finishing; left out of every count/export.
+    # Only Finishing accounts ever receive removed orders.
     is_removed: bool
     removed_by: str | None
     removed_at: datetime | None
@@ -618,6 +622,7 @@ class CloseOrderWeekView(BaseModel):
     week_end: date
     published_at: datetime
     imported: bool
+    is_published: bool
     source_errors: list[str]
     can_edit: bool
     can_override: bool

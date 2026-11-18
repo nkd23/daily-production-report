@@ -6,8 +6,10 @@ chưa có Sew, tra WF và Cust. Style No trong file THV PRODUCTION PLAN mới nh
 (POST /api/progress/ingest). Cài đặt nằm trong config.ini cạnh file .exe.
 
     DayTienDo.exe                  chạy bình thường (đọc + gửi tab Tiến độ)
-    DayTienDo.exe --close-order    gửi số End sew/End pack cho tab Close order
-                                   (chạy 15:00 thứ 5 hằng tuần)
+    DayTienDo.exe --close-order    gửi số Close order và công bố tuần trước cho
+                                   mọi người (chạy 15:00 thứ 5 hằng tuần)
+    DayTienDo.exe --close-order --nhap
+                                   bản nháp chỉ Finishing xem (9:00 thứ 5)
     thêm --thu                     chỉ đọc, ghi kết quả ra file .json, không gửi
 
 Chỉ đọc file - không bao giờ sửa file Excel của ai."""
@@ -25,7 +27,7 @@ from datetime import date, datetime, timedelta
 
 import openpyxl
 
-VERSION = "1.2"
+VERSION = "1.3"
 TRACKER_SHEET = "bảng tiến độ"
 PLAN_SHEET = "Plan"
 
@@ -348,6 +350,7 @@ def main() -> int:
     warnings.filterwarnings("ignore")
     dry_run = "--thu" in sys.argv[1:]
     close_order = "--close-order" in sys.argv[1:]
+    draft = "--nhap" in sys.argv[1:]
     cfg_path = os.path.join(base_dir(), "config.ini")
     cfg = configparser.ConfigParser()
     if not cfg.read(cfg_path, encoding="utf-8") or "tien_do" not in cfg:
@@ -365,8 +368,11 @@ def main() -> int:
         log(f"Không thấy thư mục PRODUCTION PLAN: {plan_folder}")
         return 2
 
-    log(f"Bắt đầu đọc {folder}" + (" (Close order)" if close_order else ""))
+    log(f"Bắt đầu đọc {folder}" + ((" (Close order - bản nháp)" if draft else " (Close order)") if close_order else ""))
     payload = collect(folder, plan_folder, close_order)
+    if close_order:
+        # Thursday 9:00: draft only Finishing sees; 15:00: publish to all.
+        payload["publish"] = not draft
     total = sum(len(s["rows"]) for s in payload["sources"])
     errors = sum(1 for s in payload["sources"] if s["error"])
     log(f"Đọc xong {len(payload['sources'])} file, {total} {'dòng' if close_order else 'đơn'}, {errors} file lỗi")

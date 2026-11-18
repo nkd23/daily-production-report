@@ -334,6 +334,9 @@ class CloseOrderWeek(Base):
     week_start: Mapped["Date"] = mapped_column(Date, unique=True, nullable=False)
     published_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
     imported: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # False = Thursday 9:00 draft, seen only by Finishing (to chase late
+    # reasons/departments); the 15:00 run publishes it to everyone else.
+    is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # "owner: error" lines for trackers that could not be read on that run.
     source_errors: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
 
@@ -383,6 +386,17 @@ class CloseOrderItem(Base):
     source: Mapped[str] = mapped_column(Unicode(10), nullable=False, default="web")
     updated_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     updated_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+
+
+class CloseOrderReportedJo(Base):
+    """JOs of Close order weeks dropped by the 6-week history limit, kept
+    only so those JOs are still never reported a second time."""
+
+    __tablename__ = "close_order_reported_jos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    jo: Mapped[str] = mapped_column(Unicode(50), unique=True, nullable=False)
+    week_start: Mapped["Date"] = mapped_column(Date, nullable=False)
 
 
 class Holiday(Base):

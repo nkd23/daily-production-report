@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   CalendarOff,
   CheckCircle2,
+  Boxes,
   ClipboardCheck,
   Download,
+  FileClock,
+  Timer,
   RotateCcw,
   Info,
   Percent,
@@ -28,8 +31,22 @@ const UNASSIGNED = "Chưa phân Executive";
 const NO_DEPT = "Chưa ghi bộ phận";
 // Status colours: on time = good, late = critical. Always with a legend and
 // the counts in text, never colour alone.
-const COLOR_ONTIME = "var(--success)";
-const COLOR_LATE = "var(--danger)";
+// From the factory's own Close Order dashboard palette (validated for
+// colour-blind separation): teal = on time, coral = late.
+const COLOR_ONTIME = "#249D8F";
+const COLOR_LATE = "#E76F51";
+// Departments blamed for late orders; "not recorded yet" stays neutral grey.
+const DEPT_COLORS: Record<string, string> = {
+  Sewing: "#C8961C",
+  Washing: "#2F80B5",
+  Cutting: "#D1495B",
+  Finishing: "#9B5DE5",
+  Khác: "#6B8F23",
+};
+const NO_DEPT_COLOR = "#94A3B8";
+const deptColor = (d: string) => DEPT_COLORS[d] ?? NO_DEPT_COLOR;
+const COLOR_SEW = "#C8961C";
+const COLOR_PACK = "#2F80B5";
 const TICK = { fontSize: 12, fill: "var(--muted)" };
 
 function ddmm(iso: string | null, withYear = false) {
@@ -165,6 +182,130 @@ function CountBars({
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+/** Part-of-whole donut with the share of each slice listed beside it. */
+function Donut({
+  data,
+  center,
+  centerSub,
+  onPick,
+}: {
+  data: { name: string; value: number; color: string }[];
+  center: string;
+  centerSub: string;
+  onPick?: (name: string) => void;
+}) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (!total) return <p className="py-6 text-center text-sm text-muted">Không có dữ liệu</p>;
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <div className="relative h-44 w-44 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius="62%"
+              outerRadius="100%"
+              stroke="var(--surface)"
+              strokeWidth={2}
+              isAnimationActive={false}
+              onClick={onPick ? (d) => onPick((d as unknown as { name: string }).name) : undefined}
+              cursor={onPick ? "pointer" : undefined}
+            >
+              {data.map((d) => (
+                <Cell key={d.name} fill={d.color} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v, n) => [`${v} đơn (${pct(Number(v), total)})`, n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-semibold">{center}</span>
+          <span className="text-[11px] text-muted">{centerSub}</span>
+        </div>
+      </div>
+      <ul className="min-w-[9rem] flex-1 space-y-1.5 text-sm">
+        {data.map((d) => (
+          <li key={d.name}>
+            <button
+              type="button"
+              disabled={!onPick}
+              onClick={() => onPick?.(d.name)}
+              className="flex w-full items-center gap-2 rounded px-1 text-left enabled:hover:bg-primary-soft/50"
+            >
+              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: d.color }} />
+              <span className="flex-1 truncate">{d.name}</span>
+              <span className="tabular-nums text-muted">{d.value}</span>
+              <span className="w-12 text-right font-medium tabular-nums">{pct(d.value, total)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Executive x line grid of late counts: darker = more late orders. */
+function LateHeatmap({
+  rows,
+  cols,
+  value,
+  onPick,
+}: {
+  rows: string[];
+  cols: string[];
+  value: (row: string, col: string) => number;
+  onPick: (row: string, col: string) => void;
+}) {
+  const max = Math.max(1, ...rows.flatMap((r) => cols.map((c) => value(r, c))));
+  if (!cols.length) return <p className="py-6 text-center text-sm text-muted">Không có đơn late</p>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="border-separate border-spacing-1 text-xs">
+        <thead>
+          <tr>
+            <th />
+            {cols.map((c) => (
+              <th key={c} className="px-1 font-medium text-muted">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r}>
+              <th className="whitespace-nowrap pr-2 text-left font-medium">{r}</th>
+              {cols.map((c) => {
+                const v = value(r, c);
+                const a = v ? 0.18 + 0.82 * (v / max) : 0;
+                return (
+                  <td key={c}>
+                    <button
+                      type="button"
+                      disabled={!v}
+                      onClick={() => onPick(r, c)}
+                      title={v ? `${r} · ${c}: ${v} đơn late` : undefined}
+                      className="h-8 w-10 rounded text-center tabular-nums"
+                      style={{
+                        backgroundColor: v ? `rgba(231, 111, 81, ${a})` : "var(--surface-muted)",
+                        color: a > 0.6 ? "#fff" : "var(--foreground)",
+                      }}
+                    >
+                      {v || ""}
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -436,7 +577,7 @@ function CloseOrderContent() {
       ),
     [items, filters]
   );
-  const late = filtered.filter((i) => i.is_late);
+  const late = useMemo(() => filtered.filter((i) => i.is_late), [filtered]);
   const anyFilter = Object.values(filters).some(Boolean);
   const pick = (key: keyof Filters) => (value: string) =>
     setFilters((f) => ({ ...f, [key]: f[key] === value ? "" : value }));
@@ -469,7 +610,9 @@ function CloseOrderContent() {
         const deptCounts: Record<string, number> = {};
         for (const r of lateRows) deptCounts[r.department ?? NO_DEPT] = (deptCounts[r.department ?? NO_DEPT] ?? 0) + 1;
         const shortPack = rows.reduce((s, r) => s + (r.pack_cut != null && r.pack_cut < 0 ? -r.pack_cut : 0), 0);
-        return { name, total: rows.length, late: lateRows.length, ontime: rows.length - lateRows.length, deptCounts, shortPack };
+        const sew = rows.reduce((s, r) => s + (r.sew_qty ?? 0), 0);
+        const pack = rows.reduce((s, r) => s + (r.pack_qty ?? 0), 0);
+        return { name, total: rows.length, late: lateRows.length, ontime: rows.length - lateRows.length, deptCounts, shortPack, sew, pack };
       })
       .sort((a, b) => b.late - a.late || b.total - a.total);
   }, [filtered]);
@@ -478,6 +621,18 @@ function CloseOrderContent() {
   const lateByDept = deptNames
     .map((d) => ({ name: d, value: late.filter((i) => (i.department ?? NO_DEPT) === d).length }))
     .filter((d) => d.value);
+  const deptDonut = lateByDept.map((d) => ({ ...d, color: deptColor(d.name) }));
+  const deptByExec = byExec
+    .filter((e) => e.late)
+    .map((e) => ({ name: e.name, ...Object.fromEntries(deptNames.map((d) => [d, e.deptCounts[d] ?? 0])) }));
+  const heatLines = [...new Set(late.map((i) => i.line_number))].sort();
+  const heatExecs = byExec.filter((e) => e.late).map((e) => e.name);
+  const avgLateDuration = (() => {
+    const d = late.map((i) => i.late_duration).filter((v): v is number => v != null);
+    return d.length ? Math.round((d.reduce((a, b) => a + b, 0) / d.length) * 10) / 10 : null;
+  })();
+  const orderQty = filtered.reduce((s, i) => s + (i.order_qty ?? 0), 0);
+
   const reasons = useMemo(() => {
     const map = new Map<string, number>();
     for (const i of late) {
@@ -580,7 +735,7 @@ function CloseOrderContent() {
           <Select value={weekStart} onChange={(e) => setWeekStart(e.target.value)} className="!w-auto" disabled={!weeks?.length}>
             {weeks?.map((w) => (
               <option key={w.week_start} value={w.week_start}>
-                Tuần {ddmm(w.week_start)} – {ddmm(w.week_end, true)} ({w.total} đơn)
+                Tuần {ddmm(w.week_start)} – {ddmm(w.week_end, true)} ({w.total} đơn){w.is_published ? "" : " · NHÁP"}
               </option>
             ))}
           </Select>
@@ -640,6 +795,18 @@ function CloseOrderContent() {
             ) : null}
           </div>
 
+          {!view.is_published ? (
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-warning/50 bg-warning-soft px-4 py-3 text-sm">
+              <FileClock size={18} className="mt-0.5 shrink-0 text-warning" />
+              <p>
+                <b>Bản nháp - chỉ Finishing thấy.</b> Manager, Executive và Thư ký chưa thấy tuần này. Hãy hỏi lý do và điền{" "}
+                <b>Remark / Department</b> cho các đơn late (xem phần <a href="#can-xu-ly" className="text-primary underline">Cần xử lý</a> và{" "}
+                <a href="#chi-tiet" className="text-primary underline">Chi tiết đơn</a>). <b>15:00 thứ 5</b> web lấy lại số mới nhất từ bảng
+                tiến độ, giữ nguyên phần đã điền, rồi công bố cho mọi người.
+              </p>
+            </div>
+          ) : null}
+
           {/* Section links + page-wide filters */}
           <div className="sticky top-[57px] z-10 -mx-4 mb-2 border-b border-border bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6">
             <nav className="mb-2 flex gap-1 overflow-x-auto text-sm">
@@ -695,7 +862,7 @@ function CloseOrderContent() {
           </div>
 
           <Section id="tong-quan" title="Tổng quan">
-            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <StatCard label="Tổng đơn close" value={String(total)} icon={ClipboardCheck} tone="primary" />
               <StatCard label="Ontime" value={String(ontime)} sub={pct(ontime, total)} icon={CheckCircle2} tone="success" />
               <StatCard label="Late" value={String(late.length)} sub={pct(late.length, total)} icon={TriangleAlert} tone="danger" />
@@ -711,8 +878,18 @@ function CloseOrderContent() {
                 }
                 icon={Percent}
               />
+              <StatCard
+                label="Late duration TB"
+                value={avgLateDuration == null ? "-" : `${avgLateDuration} ngày`}
+                sub="trung bình các đơn late"
+                icon={Timer}
+                tone="warning"
+              />
+              <StatCard label="Tổng Order Qty" value={num(orderQty) || "0"} sub="pcs các đơn close" icon={Boxes} />
             </div>
-            <ChartCard title="Xu hướng theo tuần" note="Số đơn ontime/late mỗi tuần; con số trên cột là % late (càng thấp càng tốt). Toàn bộ các line, không theo bộ lọc.">
+            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+            <ChartCard title={`Xu hướng ${trend.length} tuần gần nhất`} note="Số đơn ontime/late mỗi tuần; con số trên cột là % late (càng thấp càng tốt). Toàn bộ các line, không theo bộ lọc. Web giữ 6 tuần gần nhất.">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={trend} margin={{ top: 22, right: 8, bottom: 4, left: -8 }}>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
@@ -727,6 +904,18 @@ function CloseOrderContent() {
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
+            </div>
+            <ChartCard title="Tỷ lệ Ontime / Late" note="Tuần đang xem, theo bộ lọc.">
+              <Donut
+                data={[
+                  { name: "Ontime", value: ontime, color: COLOR_ONTIME },
+                  { name: "Late", value: late.length, color: COLOR_LATE },
+                ]}
+                center={pct(ontime, total)}
+                centerSub="ontime"
+              />
+            </ChartCard>
+            </div>
           </Section>
 
           <Section id="executive" title="Executive" description="Kết quả close order và bộ phận gây late của từng Executive. Bấm vào dòng hoặc thanh để lọc.">
@@ -804,12 +993,51 @@ function CloseOrderContent() {
                 </ChartCard>
               </div>
             </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <ChartCard title="Late theo bộ phận của từng Executive" note="Mỗi thanh là một Executive, chia theo bộ phận chịu trách nhiệm.">
+                {deptByExec.length ? (
+                  <ResponsiveContainer width="100%" height={Math.max(150, deptByExec.length * 38 + 70)}>
+                    <BarChart data={deptByExec} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                      <CartesianGrid horizontal={false} stroke="var(--border)" />
+                      <XAxis type="number" allowDecimals={false} tick={TICK} />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12, fill: "var(--foreground)" }} />
+                      <Tooltip cursor={{ fill: "var(--surface-muted)" }} formatter={(v, n) => [`${v} đơn`, n]} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {deptNames
+                        .filter((d) => deptByExec.some((r) => (r as Record<string, number | string>)[d]))
+                        .map((d) => (
+                          <Bar key={d} dataKey={d} name={d} stackId="d" fill={deptColor(d)} stroke="var(--surface)" strokeWidth={2} maxBarSize={22} isAnimationActive={false} />
+                        ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted">Không có đơn late</p>
+                )}
+              </ChartCard>
+              <ChartCard title="SEW Qty và PACK Qty theo Executive" note="Tổng pcs đã may / đã pack của các đơn close (pcs).">
+                <ResponsiveContainer width="100%" height={Math.max(150, byExec.length * 46 + 60)}>
+                  <BarChart data={byExec} layout="vertical" margin={{ top: 4, right: 56, bottom: 4, left: 4 }}>
+                    <CartesianGrid horizontal={false} stroke="var(--border)" />
+                    <XAxis type="number" tick={TICK} tickFormatter={(v) => num(Number(v))} />
+                    <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12, fill: "var(--foreground)" }} />
+                    <Tooltip cursor={{ fill: "var(--surface-muted)" }} formatter={(v, n) => [`${num(Number(v))} pcs`, n]} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="sew" name="SEW Qty" fill={COLOR_SEW} radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false}>
+                      <LabelList dataKey="sew" position="right" fontSize={10} fill="var(--muted)" formatter={(v) => num(Number(v))} />
+                    </Bar>
+                    <Bar dataKey="pack" name="PACK Qty" fill={COLOR_PACK} radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false}>
+                      <LabelList dataKey="pack" position="right" fontSize={10} fill="var(--muted)" formatter={(v) => num(Number(v))} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
           </Section>
 
           <Section id="nguyen-nhan" title="Nguyên nhân late" description="Late do khâu nào, vì lý do gì, và trễ bao lâu (Remark và Department in charge do Finishing điền).">
             <div className="grid gap-4 md:grid-cols-2">
-              <ChartCard title="Late theo bộ phận" note="Bấm vào thanh để lọc theo bộ phận.">
-                <CountBars data={lateByDept} onPick={pick("dept")} width={120} />
+              <ChartCard title="Tỷ trọng bộ phận gây late" note="% đơn late theo bộ phận chịu trách nhiệm. Bấm để lọc.">
+                <Donut data={deptDonut} center={String(late.length)} centerSub="đơn late" onPick={pick("dept")} />
               </ChartCard>
               <ChartCard title="Mức độ trễ của các đơn late" note="Số đơn late theo Late duration (ngày làm việc).">
                 <CountBars data={severity.filter((s) => s.value)} width={70} />
@@ -835,6 +1063,16 @@ function CloseOrderContent() {
           </Section>
 
           <Section id="line-buyer" title="Line & Buyer" description="Điểm nóng theo chuyền và theo khách hàng.">
+            <div className="mb-4">
+              <ChartCard title="Số đơn late: Executive theo Line" note="Ô càng đậm càng nhiều đơn late. Bấm vào một ô để lọc theo cả Executive và line đó.">
+                <LateHeatmap
+                  rows={heatExecs}
+                  cols={heatLines}
+                  value={(r, c) => late.filter((i) => execOf(i) === r && i.line_number === c).length}
+                  onPick={(r, c) => setFilters((f) => ({ ...f, executive: r, line: c }))}
+                />
+              </ChartCard>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <ChartCard title="Số đơn late theo line" note="Chỉ hiện các line có đơn late. Bấm để lọc.">
                 <CountBars data={lateByLine} onPick={pick("line")} width={50} />

@@ -13,7 +13,10 @@ SharePoint "Bảng tiến độ mới" về bằng OneDrive. Mỗi sáng chươn
 Chạy với `--close-order` (15:00 thứ 5, lịch `DayTienDo-CloseOrder`): gửi End
 sew/End pack, số lượng và Product Category của mọi màu thuộc các JO có End
 sew trong 120 ngày gần nhất lên `POST /api/close-order/ingest`; web chốt
-danh sách Close order của tuần trước (xem `backend/app/services/close_order.py`).
+danh sách Close order của tuần trước và công bố cho mọi người (xem
+`backend/app/services/close_order.py`). Thêm `--nhap` (9:00 thứ 5, lịch
+`DayTienDo-CloseOrderNhap`) để chỉ tạo bản nháp mà riêng tài khoản Finishing
+thấy.
 
 Mọi quy tắc hiển thị (chuẩn hóa tên line, Executive, cột late) nằm ở `backend/app/services/progress.py`, nên sửa quy tắc
 không cần cài lại chương trình.
@@ -26,7 +29,7 @@ build_exe.bat
 
 Ra `dist\DayTienDo.exe` (1 file, không mở cửa sổ). Đóng gói cùng
 `config.ini` (mẫu: `config.example.ini`), `CaiLich.bat`,
-`cai_lich.ps1`, `ChayNgay.bat`, `ChayCloseOrder.bat`.
+`cai_lich.ps1`, `ChayNgay.bat`, `ChayCloseOrder.bat`, `ChayCloseOrderNhap.bat`.
 
 `config.ini` chứa khóa `PROGRESS_INGEST_KEY` của web - không commit.
 

@@ -27,10 +27,12 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from app.models import CloseOrderItem, CloseOrderRow, CloseOrderWeek, Holiday, Line, User, UserRole
+from app.models import CloseOrderItem, CloseOrderReportedJo, CloseOrderRow, CloseOrderWeek, Holiday, Line, User, UserRole
 from app.services.progress import normalize_line, owner_from_file, parse_iso, visible_line_numbers
 
 LATE_AFTER_DAYS = 3
+# Close order history kept: the most recent published weeks.
+HISTORY_WEEKS = 6
 WF_CATEGORY = "WWF_T"
 DEPARTMENTS = ("Cutting", "Sewing", "Washing", "Finishing", "Khác")
 ROW_INT_FIELDS = ("order_qty", "cut_qty", "sew_qty", "pack_qty", "pack_cut")
@@ -201,11 +203,20 @@ def ingest(db: Session, payload, now: datetime) -> dict:
     db.flush()
 
     week_start = previous_week_start(now.date())
-    count = publish_week(db, week_start, now, errors)
-    return {"week_start": week_start.isoformat(), "orders": count, "source_errors": len(errors)}
+    count = publish_week(db, week_start, now, errors, publish=payload.publish)
+    week = db.scalar(select(CloseOrderWeek).where(CloseOrderWeek.week_start == week_start))
+    return {
+        "week_start": week_start.isoformat(),
+        "orders": count,
+        "published": bool(week and week.is_published),
+        "source_errors": len(errors),
+    }
 
 
-def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]) -> int:
+def publish_week(db: Session, week_start: date, now: datetime, errors: list[str], publish: bool = True) -> int:
+    """Build last week's list from the trackers. publish=False is the
+    Thursday 9:00 draft for Finishing; a published week never goes back to
+    draft."""
     start, end = week_bounds(week_start)
     orders = closed_orders(db.scalars(select(CloseOrderRow)).all())
 
@@ -223,7 +234,7 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
     reported_jos = {
         jo.upper()
         for jo in db.scalars(select(CloseOrderItem.jo).where(CloseOrderItem.week_start != week_start)).all()
-    }
+    } | {jo.upper() for jo in db.scalars(select(CloseOrderReportedJo.jo)).all()}
     _refresh(db, orders)
 
     wanted = {
@@ -246,11 +257,31 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
         db.execute(insert(CloseOrderItem), new_items)
 
     if week is None:
-        week = CloseOrderWeek(week_start=week_start, imported=False)
+        week = CloseOrderWeek(week_start=week_start, imported=False, is_published=False)
         db.add(week)
+    week.is_published = bool(week.is_published) or publish
     week.published_at = now
     week.source_errors = json.dumps(errors, ensure_ascii=False) if errors else None
+    if week.is_published:
+        db.flush()
+        trim_history(db)
     return len(wanted)
+
+
+def trim_history(db: Session) -> None:
+    """Keep the HISTORY_WEEKS most recent published weeks. Older weeks are
+    deleted; their JOs are remembered so they are never reported again."""
+    published = db.scalars(
+        select(CloseOrderWeek).where(CloseOrderWeek.is_published == True).order_by(CloseOrderWeek.week_start.desc())  # noqa: E712
+    ).all()
+    known = {jo.upper() for jo in db.scalars(select(CloseOrderReportedJo.jo)).all()}
+    for week in published[HISTORY_WEEKS:]:
+        for jo in db.scalars(select(CloseOrderItem.jo).where(CloseOrderItem.week_start == week.week_start)).all():
+            if jo.upper() not in known:
+                known.add(jo.upper())
+                db.add(CloseOrderReportedJo(jo=jo.upper(), week_start=week.week_start))
+        db.execute(delete(CloseOrderItem).where(CloseOrderItem.week_start == week.week_start))
+        db.delete(week)
 
 
 def _refresh(db: Session, orders: dict) -> None:
@@ -309,6 +340,7 @@ def import_weeks(db: Session, payload, now: datetime) -> dict:
             week = CloseOrderWeek(week_start=wk.week_start)
             db.add(week)
         week.imported = True
+        week.is_published = True
         week.published_at = now
         week.source_errors = None
         total += len(rows)
@@ -391,13 +423,17 @@ def list_weeks(db: Session, user: User, today: date) -> list[dict]:
         _, late, _, _ = effective_late(item, today, holidays)
         counts[item.week_start][0] += 1
         counts[item.week_start][1] += int(late)
-    weeks = db.scalars(select(CloseOrderWeek).order_by(CloseOrderWeek.week_start.desc())).all()
+    stmt = select(CloseOrderWeek).order_by(CloseOrderWeek.week_start.desc())
+    if user.role != UserRole.finishing:
+        stmt = stmt.where(CloseOrderWeek.is_published == True)  # noqa: E712
+    weeks = db.scalars(stmt).all()
     return [
         {
             "week_start": w.week_start,
             "week_end": week_bounds(w.week_start)[1],
             "published_at": w.published_at,
             "imported": w.imported,
+            "is_published": w.is_published,
             "total": counts[w.week_start][0],
             "late": counts[w.week_start][1],
         }
@@ -407,15 +443,19 @@ def list_weeks(db: Session, user: User, today: date) -> list[dict]:
 
 def week_view(db: Session, user: User, week_start: date, today: date) -> dict | None:
     week = db.scalar(select(CloseOrderWeek).where(CloseOrderWeek.week_start == week_start))
-    if week is None:
+    # The Thursday-morning draft exists only for Finishing until 15:00.
+    if week is None or (not week.is_published and user.role != UserRole.finishing):
         return None
     allowed = visible_line_numbers(db, user)
     lines = _line_map(db)
     holidays = holiday_set(db)
+    # Removed orders are Finishing's business: nobody else even receives
+    # them (the report reads as if they were never there).
+    show_removed = user.role == UserRole.finishing
     items = [
         item_out(i, lines, today, holidays)
         for i in db.scalars(select(CloseOrderItem).where(CloseOrderItem.week_start == week_start)).all()
-        if allowed is None or i.line_number in allowed
+        if (allowed is None or i.line_number in allowed) and (show_removed or not i.is_removed)
     ]
     items.sort(key=lambda r: (r["executive_name"] is None, r["pu_group"] or "", r["line_number"], r["end_sew"], r["jo"]))
     return {
@@ -423,6 +463,7 @@ def week_view(db: Session, user: User, week_start: date, today: date) -> dict | 
         "week_end": week_bounds(week.week_start)[1],
         "published_at": week.published_at,
         "imported": week.imported,
+        "is_published": week.is_published,
         "source_errors": json.loads(week.source_errors) if week.source_errors else [],
         "can_edit": user.role in (UserRole.sep, UserRole.finishing),
         # Late duration / late-ontime overrides and removing orders.
