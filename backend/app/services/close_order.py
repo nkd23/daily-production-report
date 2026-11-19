@@ -353,11 +353,20 @@ def _effective_wf(item: CloseOrderItem) -> bool:
     return (item.product_category or "").strip().upper() == WF_CATEGORY
 
 
+def effective_dates(item: CloseOrderItem) -> tuple[date, str | None]:
+    """End Sew / End Pack after Finishing's corrections."""
+    end_sew = item.end_sew_override or item.end_sew
+    end_pack = item.end_pack_override.isoformat() if item.end_pack_override else item.end_pack
+    return end_sew, end_pack
+
+
 def effective_late(item: CloseOrderItem, today: date, holidays: set[date]) -> tuple[int | None, bool, int | None, bool]:
-    """(duration, late, formula duration, formula late). Finishing's own
-    duration feeds the late rule unless late/on time is also set by hand."""
+    """(duration, late, formula duration, formula late). The formula runs on
+    the corrected dates; Finishing's own duration feeds the late rule unless
+    late/on time is also set by hand."""
     wf = _effective_wf(item)
-    auto_duration, auto_late = late_status(item.end_sew, item.end_pack, wf, today, holidays)
+    end_sew, end_pack = effective_dates(item)
+    auto_duration, auto_late = late_status(end_sew, end_pack, wf, today, holidays)
     duration = item.duration_override if item.duration_override is not None else auto_duration
     if item.late_override is not None:
         late = item.late_override
@@ -387,8 +396,12 @@ def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays
         "pack_cut": item.pack_cut,
         "bpo_date": item.bpo_date,
         "exfty_date": item.exfty_date,
-        "end_sew": item.end_sew,
-        "end_pack": item.end_pack,
+        "end_sew": effective_dates(item)[0],
+        "end_pack": effective_dates(item)[1],
+        "tracker_end_sew": item.end_sew,
+        "tracker_end_pack": item.end_pack,
+        "end_sew_manual": item.end_sew_override is not None,
+        "end_pack_manual": item.end_pack_override is not None,
         "late_duration": duration,
         "is_late": late,
         "auto_late_duration": auto_duration,

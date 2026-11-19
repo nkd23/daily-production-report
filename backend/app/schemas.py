@@ -593,6 +593,11 @@ class CloseOrderItemOut(BaseModel):
     end_sew: date
     # ISO date, "Done", or None while a colour is still unpacked.
     end_pack: str | None
+    # What the trackers say, shown beside a date Finishing corrected.
+    tracker_end_sew: date
+    tracker_end_pack: str | None
+    end_sew_manual: bool
+    end_pack_manual: bool
     # Effective values (Finishing's when set, else the formula's) and the
     # formula's own, shown alongside when overridden.
     late_duration: int | None
@@ -637,6 +642,8 @@ class CloseOrderItemUpdate(BaseModel):
 
     wf: bool | None = None
     late_duration: int | None = Field(default=None, ge=0, le=365)
+    end_sew: date | None = None
+    end_pack: date | None = None
     is_late: bool | None = None
     removed: bool | None = None
     remark: str | None = Field(default=None, max_length=1000)

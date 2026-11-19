@@ -376,6 +376,10 @@ class CloseOrderItem(Base):
     # Finishing's own call when the formula doesn't fit the case (None =
     # use the formula): Late duration in days, and late/on time.
     duration_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Finishing's corrected End Sew / End Pack dates (None = the trackers'),
+    # kept apart so the weekly refresh from the trackers never overwrites them.
+    end_sew_override: Mapped["Date | None"] = mapped_column(Date, nullable=True)
+    end_pack_override: Mapped["Date | None"] = mapped_column(Date, nullable=True)
     late_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # Taken out of the report by Finishing (e.g. the line asked to drop a
     # late order). Kept, not deleted, so it can be restored and a re-run of

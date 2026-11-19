@@ -202,6 +202,9 @@ export type CloseOrderPatch = {
   remark?: string;
   department?: string;
   late_duration?: number | null;
+  /** "YYYY-MM-DD", or null to go back to the trackers' date. */
+  end_sew?: string | null;
+  end_pack?: string | null;
   is_late?: boolean | null;
   removed?: boolean;
 };

@@ -20,6 +20,7 @@ from app.schemas import (
     HolidayIn,
     HolidayOut,
 )
+from app.services.progress import parse_iso
 from app.services.close_order import (
     DEPARTMENTS,
     _line_map,
@@ -105,7 +106,7 @@ def update_item(
     sent = payload.model_fields_set
     # Overriding the late result or dropping an order is Finishing's call
     # alone; Managers can still fill in WF / remark / department.
-    if sent & {"late_duration", "is_late", "removed"} and current_user.role != UserRole.finishing:
+    if sent & {"late_duration", "is_late", "removed", "end_sew", "end_pack"} and current_user.role != UserRole.finishing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ tài khoản Finishing được sửa Late hoặc xóa đơn",
@@ -113,6 +114,15 @@ def update_item(
     now = local_now().replace(tzinfo=None)
     if "wf" in sent:
         item.wf = payload.wf
+    if "end_sew" in sent or "end_pack" in sent:
+        new_sew = payload.end_sew if "end_sew" in sent else item.end_sew_override
+        new_pack = payload.end_pack if "end_pack" in sent else item.end_pack_override
+        sew = new_sew or item.end_sew
+        pack = new_pack or parse_iso(item.end_pack)
+        if pack is not None and pack < sew:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="End Pack không được trước End Sew")
+        item.end_sew_override = new_sew
+        item.end_pack_override = new_pack
     if "late_duration" in sent:
         item.duration_override = payload.late_duration
     if "is_late" in sent:

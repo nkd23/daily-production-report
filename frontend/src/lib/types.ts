@@ -397,6 +397,11 @@ export interface CloseOrderItem {
   end_sew: string;
   /** ISO date, "Done", or null while a colour is still unpacked. */
   end_pack: string | null;
+  /** What the trackers say, shown beside a date Finishing corrected. */
+  tracker_end_sew: string;
+  tracker_end_pack: string | null;
+  end_sew_manual: boolean;
+  end_pack_manual: boolean;
   /** Effective values: Finishing's when set by hand, else the formula's. */
   late_duration: number | null;
   is_late: boolean;

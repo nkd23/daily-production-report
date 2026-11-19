@@ -367,6 +367,85 @@ function RemarkInput({ value, onSave }: { value: string | null; onSave: (text: s
   );
 }
 
+/** End Sew / End Pack cell for Finishing: pick a date to correct it, clear
+ * it to go back to the trackers' date. */
+function DateInput({
+  value,
+  manual,
+  trackerValue,
+  emptyLabel,
+  onSave,
+}: {
+  value: string | null;
+  manual: boolean;
+  trackerValue: string | null;
+  emptyLabel?: React.ReactNode;
+  onSave: (v: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const iso = value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : "";
+
+  async function save(next: string | null) {
+    try {
+      await onSave(next);
+      setEditing(false);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Không lưu được ngày");
+    }
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input
+          type="date"
+          autoFocus
+          defaultValue={iso}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditing(false);
+            if (e.key === "Enter") {
+              const v = e.currentTarget.value;
+              if (v && v !== iso) void save(v);
+              else setEditing(false);
+            }
+          }}
+          onBlur={(e) => {
+            const v = e.currentTarget.value;
+            if (v && v !== iso) void save(v);
+            else setEditing(false);
+          }}
+          className="rounded border border-primary bg-surface px-1 py-0.5 text-xs outline-none ring-2 ring-primary/20"
+        />
+        {manual ? (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => void save(null)}
+            title="Trả về ngày của bảng tiến độ"
+            className="rounded px-1 text-muted hover:bg-primary-soft hover:text-primary"
+          >
+            <RotateCcw size={12} />
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title={
+        manual
+          ? `Sửa tay. Bảng tiến độ ghi: ${trackerValue ? ddmm(trackerValue, true) : "(trống)"}. Bấm để sửa hoặc trả về.`
+          : "Bấm để sửa ngày"
+      }
+      className="rounded px-1 hover:bg-primary-soft/60"
+    >
+      {value ? ddmm(value, true) : (emptyLabel ?? "-")}
+    </button>
+  );
+}
+
 /** Late duration cell: blank = back to the formula. */
 function DurationInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: number | null) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
@@ -428,9 +507,7 @@ function DurationInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: num
           ? `Sửa tay. Công thức tính: ${item.auto_late_duration ?? "-"} ngày. Bấm, xoá trống để trả về công thức.`
           : "Bấm để sửa số ngày"
       }
-      className={`min-w-[2rem] rounded px-1 text-right tabular-nums hover:bg-primary-soft/60 ${
-        item.duration_manual ? "bg-warning-soft font-semibold text-warning" : ""
-      }`}
+      className="min-w-[2rem] rounded px-1 text-right tabular-nums hover:bg-primary-soft/60"
     >
       {item.late_duration ?? "-"}
     </button>
@@ -690,7 +767,7 @@ function CloseOrderContent() {
     const updated = await api.updateCloseOrderItem(item.id, patch);
     setView((v) => (v ? { ...v, items: v.items.map((i) => (i.id === updated.id ? updated : i)) } : v));
     // The weekly late counts (trend chart, week list) may have changed.
-    if (["wf", "late_duration", "is_late", "removed"].some((k) => k in patch)) loadWeeks();
+    if (["wf", "late_duration", "is_late", "removed", "end_sew", "end_pack"].some((k) => k in patch)) loadWeeks();
   }
 
   function removeItem(i: CloseOrderItem) {
@@ -1129,10 +1206,10 @@ function CloseOrderContent() {
             title="Chi tiết đơn hàng"
             description={
               canOverride
-                ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận, WF & TAP, sửa Late duration hoặc Late/Ontime ngay trên bảng (ô màu vàng / dấu * là đã sửa tay). Nút Xóa bỏ đơn khỏi báo cáo, khôi phục được."
+                ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận, WF & TAP; sửa End Sew, End Pack, Late duration hoặc Late/Ontime ngay trên bảng (Late duration tự tính lại theo ngày mới; rê chuột vào ô đã sửa để xem số gốc của bảng tiến độ). Nút Xóa bỏ đơn khỏi báo cáo, khôi phục được."
                 : canEdit
-                  ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận và WF & TAP ngay trên bảng. Ô màu vàng / dấu * là số Finishing đã sửa tay."
-                  : "Ô màu vàng / dấu * là số Finishing đã sửa tay."
+                  ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận và WF & TAP ngay trên bảng."
+                  : undefined
             }
           >
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -1200,13 +1277,38 @@ function CloseOrderContent() {
                         <td className={`${TD} text-right tabular-nums ${i.pack_cut && i.pack_cut < 0 ? "font-semibold text-danger" : ""}`}>
                           {num(i.pack_cut)}
                         </td>
-                        <td className={TD}>{ddmm(i.end_sew, true)}</td>
-                        <td className={TD}>{i.end_pack ? ddmm(i.end_pack, true) : <Badge tone="warning">Chưa pack</Badge>}</td>
+                        <td className={TD}>
+                          {canOverride && !i.is_removed ? (
+                            <DateInput
+                              value={i.end_sew}
+                              manual={i.end_sew_manual}
+                              trackerValue={i.tracker_end_sew}
+                              onSave={(v) => update(i, { end_sew: v })}
+                            />
+                          ) : (
+                            ddmm(i.end_sew, true)
+                          )}
+                        </td>
+                        <td className={TD}>
+                          {canOverride && !i.is_removed ? (
+                            <DateInput
+                              value={i.end_pack}
+                              manual={i.end_pack_manual}
+                              trackerValue={i.tracker_end_pack}
+                              emptyLabel={<Badge tone="warning">Chưa pack</Badge>}
+                              onSave={(v) => update(i, { end_pack: v })}
+                            />
+                          ) : i.end_pack ? (
+                            ddmm(i.end_pack, true)
+                          ) : (
+                            <Badge tone="warning">Chưa pack</Badge>
+                          )}
+                        </td>
                         <td className={`${TD} text-right tabular-nums`}>
                           {canOverride && !i.is_removed ? (
                             <DurationInput item={i} onSave={(v) => update(i, { late_duration: v })} />
                           ) : (
-                            <span className={i.duration_manual ? "font-semibold text-warning" : ""}>{i.late_duration ?? ""}</span>
+                            i.late_duration ?? ""
                           )}
                         </td>
                         <td className={TD}>
@@ -1229,9 +1331,9 @@ function CloseOrderContent() {
                               <option value="ontime">ontime</option>
                             </select>
                           ) : i.is_late ? (
-                            <Badge tone="danger">late{i.late_manual ? "*" : ""}</Badge>
+                            <Badge tone="danger">late</Badge>
                           ) : (
-                            <Badge tone="success">ontime{i.late_manual ? "*" : ""}</Badge>
+                            <Badge tone="success">ontime</Badge>
                           )}
                         </td>
                         <td className={TD}>
