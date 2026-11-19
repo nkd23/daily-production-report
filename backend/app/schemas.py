@@ -598,6 +598,8 @@ class CloseOrderItemOut(BaseModel):
     tracker_end_pack: str | None
     end_sew_manual: bool
     end_pack_manual: bool
+    tracker_pack_cut: int | None
+    pack_cut_manual: bool
     # Effective values (Finishing's when set, else the formula's) and the
     # formula's own, shown alongside when overridden.
     late_duration: int | None
@@ -644,6 +646,8 @@ class CloseOrderItemUpdate(BaseModel):
     late_duration: int | None = Field(default=None, ge=0, le=365)
     end_sew: date | None = None
     end_pack: date | None = None
+    # Pack-Cut as Finishing counts it (may be negative); None = the trackers'.
+    pack_cut: int | None = Field(default=None, ge=-10_000_000, le=10_000_000)
     is_late: bool | None = None
     removed: bool | None = None
     remark: str | None = Field(default=None, max_length=1000)

@@ -106,7 +106,7 @@ def update_item(
     sent = payload.model_fields_set
     # Overriding the late result or dropping an order is Finishing's call
     # alone; Managers can still fill in WF / remark / department.
-    if sent & {"late_duration", "is_late", "removed", "end_sew", "end_pack"} and current_user.role != UserRole.finishing:
+    if sent & {"late_duration", "is_late", "removed", "end_sew", "end_pack", "pack_cut"} and current_user.role != UserRole.finishing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ tài khoản Finishing được sửa Late hoặc xóa đơn",
@@ -123,6 +123,8 @@ def update_item(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="End Pack không được trước End Sew")
         item.end_sew_override = new_sew
         item.end_pack_override = new_pack
+    if "pack_cut" in sent:
+        item.pack_cut_override = payload.pack_cut
     if "late_duration" in sent:
         item.duration_override = payload.late_duration
     if "is_late" in sent:

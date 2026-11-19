@@ -446,6 +446,77 @@ function DateInput({
   );
 }
 
+/** Pack-Cut cell for Finishing: any whole number (negative = short);
+ * blank goes back to the trackers' Pack-Cut. */
+function PackCutInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: number | null) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const cancelled = useRef(false);
+
+  async function commit() {
+    if (cancelled.current) {
+      cancelled.current = false;
+      setEditing(false);
+      return;
+    }
+    const text = draft.replace(/[.,\s]/g, "");
+    if (text !== "" && !/^-?\d{1,8}$/.test(text)) {
+      alert("Nhập số nguyên (âm nếu thiếu pack), hoặc để trống để lấy số của bảng tiến độ.");
+      return;
+    }
+    const next = text === "" ? null : Number(text);
+    const current = item.pack_cut_manual ? item.pack_cut : null;
+    if (next !== current) {
+      try {
+        await onSave(next);
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : "Không lưu được");
+        return;
+      }
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-20 rounded border border-primary bg-surface px-1 py-0.5 text-right text-xs outline-none ring-2 ring-primary/20"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(item.pack_cut_manual && item.pack_cut != null ? String(item.pack_cut) : "");
+        setEditing(true);
+      }}
+      title={
+        item.pack_cut_manual
+          ? `Sửa tay. Bảng tiến độ ghi: ${item.tracker_pack_cut ?? "(trống)"}. Bấm, xoá trống để trả về.`
+          : "Bấm để sửa Pack-Cut"
+      }
+      className={`min-w-[2rem] rounded px-1 text-right tabular-nums hover:bg-primary-soft/60 ${
+        item.pack_cut != null && item.pack_cut < 0 ? "font-semibold text-danger" : ""
+      }`}
+    >
+      {item.pack_cut == null ? "-" : num(item.pack_cut)}
+    </button>
+  );
+}
+
 /** Late duration cell: blank = back to the formula. */
 function DurationInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: number | null) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
@@ -860,8 +931,8 @@ function CloseOrderContent() {
               <span>
                 End Sew {ddmm(view.week_start, true)} – {ddmm(view.week_end, true)}
                 {view.imported ? " (lấy từ file Close Order Report cũ)" : `, chốt lúc ${dateTime(view.published_at)}`}.{" "}
-                <b className="font-medium text-foreground">Late duration</b> = số ngày làm việc từ End Sew đến End Pack (chưa
-                pack thì đến hôm nay), không tính Chủ nhật và ngày lễ, trừ 1. Hơn 3 ngày là late; đúng 3 ngày chỉ ontime với đơn
+                <b className="font-medium text-foreground">Late duration</b> = số ngày làm việc từ End Sew đến End Pack (chưa có
+                End Pack thì đến hôm nay), không tính Chủ nhật và ngày lễ, trừ 1. Hơn 3 ngày là late; đúng 3 ngày chỉ ontime với đơn
                 WF &amp; TAP (Product Category WWF_T).
               </span>
             </span>
@@ -1160,7 +1231,7 @@ function CloseOrderContent() {
             </div>
           </Section>
 
-          <Section id="can-xu-ly" title={`Cần xử lý (${openLate.length})`} description="Đơn late mà chưa End Pack - Late duration vẫn đang tăng mỗi ngày.">
+          <Section id="can-xu-ly" title={`Cần xử lý (${openLate.length})`} description="Đơn late chưa có End Pack - Late duration vẫn đang tăng mỗi ngày.">
             {openLate.length ? (
               <Card className="overflow-x-auto p-0">
                 <table className="w-full border-separate border-spacing-0 text-left text-xs">
@@ -1197,7 +1268,7 @@ function CloseOrderContent() {
                 </table>
               </Card>
             ) : (
-              <Card className="p-6 text-sm text-muted">Không có đơn late nào còn chưa pack.</Card>
+              <Card className="p-6 text-sm text-muted">Không có đơn late nào còn chưa End pack.</Card>
             )}
           </Section>
 
@@ -1206,7 +1277,7 @@ function CloseOrderContent() {
             title="Chi tiết đơn hàng"
             description={
               canOverride
-                ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận, WF & TAP; sửa End Sew, End Pack, Late duration hoặc Late/Ontime ngay trên bảng (Late duration tự tính lại theo ngày mới; rê chuột vào ô đã sửa để xem số gốc của bảng tiến độ). Nút Xóa bỏ đơn khỏi báo cáo, khôi phục được."
+                ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận, WF & TAP; sửa End Sew, End Pack, Pack-Cut, Late duration hoặc Late/Ontime ngay trên bảng (Late duration tự tính lại theo ngày mới; rê chuột vào ô đã sửa để xem số gốc của bảng tiến độ). Nút Xóa bỏ đơn khỏi báo cáo, khôi phục được."
                 : canEdit
                   ? "Bấm vào ô Remark để ghi lý do; chọn bộ phận và WF & TAP ngay trên bảng."
                   : undefined
@@ -1275,7 +1346,11 @@ function CloseOrderContent() {
                         <td className={`${TD} text-right tabular-nums`}>{num(i.sew_qty)}</td>
                         <td className={`${TD} text-right tabular-nums`}>{num(i.pack_qty)}</td>
                         <td className={`${TD} text-right tabular-nums ${i.pack_cut && i.pack_cut < 0 ? "font-semibold text-danger" : ""}`}>
-                          {num(i.pack_cut)}
+                          {canOverride && !i.is_removed ? (
+                            <PackCutInput item={i} onSave={(v) => update(i, { pack_cut: v })} />
+                          ) : (
+                            num(i.pack_cut)
+                          )}
                         </td>
                         <td className={TD}>
                           {canOverride && !i.is_removed ? (
@@ -1295,13 +1370,13 @@ function CloseOrderContent() {
                               value={i.end_pack}
                               manual={i.end_pack_manual}
                               trackerValue={i.tracker_end_pack}
-                              emptyLabel={<Badge tone="warning">Chưa pack</Badge>}
+                              emptyLabel={<Badge tone="warning">Chưa End pack</Badge>}
                               onSave={(v) => update(i, { end_pack: v })}
                             />
                           ) : i.end_pack ? (
                             ddmm(i.end_pack, true)
                           ) : (
-                            <Badge tone="warning">Chưa pack</Badge>
+                            <Badge tone="warning">Chưa End pack</Badge>
                           )}
                         </td>
                         <td className={`${TD} text-right tabular-nums`}>

@@ -402,6 +402,8 @@ export interface CloseOrderItem {
   tracker_end_pack: string | null;
   end_sew_manual: boolean;
   end_pack_manual: boolean;
+  tracker_pack_cut: number | null;
+  pack_cut_manual: boolean;
   /** Effective values: Finishing's when set by hand, else the formula's. */
   late_duration: number | null;
   is_late: boolean;

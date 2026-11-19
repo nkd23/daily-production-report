@@ -205,6 +205,8 @@ export type CloseOrderPatch = {
   /** "YYYY-MM-DD", or null to go back to the trackers' date. */
   end_sew?: string | null;
   end_pack?: string | null;
+  /** May be negative; null goes back to the trackers' Pack-Cut. */
+  pack_cut?: number | null;
   is_late?: boolean | null;
   removed?: boolean;
 };
