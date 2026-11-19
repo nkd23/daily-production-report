@@ -418,6 +418,8 @@ export interface CloseOrderItem {
   auto_is_late: boolean;
   duration_manual: boolean;
   late_manual: boolean;
+  /** "Tồn tuần trước": sewn before this week, still not End packed. */
+  is_carry: boolean;
   is_removed: boolean;
   removed_by: string | null;
   removed_at: string | null;

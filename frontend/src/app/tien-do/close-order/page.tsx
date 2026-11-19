@@ -1435,6 +1435,15 @@ function CloseOrderContent() {
                           )}
                         </td>
                         <td className="border-b border-border px-1 py-1">
+                          {/* Draft only, Finishing only, never saved into Remark. */}
+                          {i.is_carry && canOverride && !view.is_published ? (
+                            <span
+                              className="block px-1.5 text-[10px] font-medium text-primary"
+                              title="Đã end sew đủ màu trước tuần này nhưng đến ngày làm báo cáo vẫn chưa End pack. Chỉ Finishing thấy dòng này, và chỉ trong bản nháp."
+                            >
+                              Tồn tuần trước - chưa End pack
+                            </span>
+                          ) : null}
                           {canEdit ? (
                             <RemarkInput value={i.remark} onSave={(t) => update(i, { remark: t })} />
                           ) : (

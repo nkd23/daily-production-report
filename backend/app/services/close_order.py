@@ -33,6 +33,10 @@ from app.services.progress import normalize_line, owner_from_file, parse_iso, vi
 LATE_AFTER_DAYS = 3
 # Close order history kept: the most recent published weeks.
 HISTORY_WEEKS = 6
+# "Tồn tuần trước" looks this far back before the reported week.
+CARRY_LOOKBACK_DAYS = 56
+# Finishing's notes on an order that carry over when it is listed again.
+CARRIED_NOTE_FIELDS = ("remark", "department", "wf", "end_sew_override", "end_pack_override", "pack_cut_override")
 WF_CATEGORY = "WWF_T"
 DEPARTMENTS = ("Cutting", "Sewing", "Washing", "Finishing", "Khác")
 ROW_INT_FIELDS = ("order_qty", "cut_qty", "sew_qty", "pack_qty", "pack_cut")
@@ -242,17 +246,24 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
         for key, info in orders.items()
         if start <= info["end_sew"] <= end and key[1] not in reported_jos
     }
+    carry, previous = _carried_orders(db, orders, week_start, now.date())
     for key, item in kept.items():
-        if key not in wanted:
+        if key not in wanted and key not in carry:
             db.delete(item)
     new_items = []
-    for (line, jo), info in wanted.items():
-        item = kept.get((line, jo))
-        if item is not None:
-            item.end_sew = info["end_sew"]
-            item.buyer = info["buyer"] or item.buyer
-            continue
-        new_items.append({"week_start": week_start, "line_number": line, "jo": jo, "source": "web", **info})
+    for is_carry, group in ((False, wanted), (True, carry)):
+        for (line, jo), info in group.items():
+            item = kept.get((line, jo))
+            if item is not None:
+                item.end_sew = info["end_sew"]
+                item.buyer = info["buyer"] or item.buyer
+                item.is_carry = is_carry
+                continue
+            row = {"week_start": week_start, "line_number": line, "jo": jo, "source": "web", "is_carry": is_carry, **info}
+            prev = previous.get((line, jo))
+            if prev is not None:
+                row.update({f: getattr(prev, f) for f in CARRIED_NOTE_FIELDS})
+            new_items.append(row)
     if new_items:
         db.execute(insert(CloseOrderItem), new_items)
 
@@ -265,7 +276,41 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
     if week.is_published:
         db.flush()
         trim_history(db)
-    return len(wanted)
+    return len(wanted) + len(carry)
+
+
+def _carried_orders(db: Session, orders: dict, week_start: date, report_day: date) -> tuple[dict, dict]:
+    """"Tồn tuần trước" (as in Finishing's old filter tool): orders whose
+    last colour finished sewing in the CARRY_LOOKBACK_DAYS before this week
+    but are still not packed out on the report day - listed again this
+    week even if an earlier week already reported them. Orders Finishing
+    removed, or marked packed, are left out. Also returns each order's
+    latest earlier listing, whose notes the new listing starts from."""
+    previous: dict[tuple[str, str], CloseOrderItem] = {}
+    for item in db.scalars(
+        select(CloseOrderItem).where(CloseOrderItem.week_start < week_start).order_by(CloseOrderItem.week_start)
+    ).all():
+        previous[(item.line_number, item.jo.upper())] = item
+    look_from = week_start - timedelta(days=CARRY_LOOKBACK_DAYS)
+    carry = {}
+    for key, info in orders.items():
+        if not (look_from <= info["end_sew"] < week_start):
+            continue
+        prev = previous.get(key)
+        if prev is not None and prev.is_removed:
+            continue
+        # Finishing's corrected date first, then the trackers, then what an
+        # earlier listing recorded (e.g. weeks taken over from the old report).
+        end_pack = (
+            (prev.end_pack_override.isoformat() if prev is not None and prev.end_pack_override else None)
+            or info["end_pack"]
+            or (prev.end_pack if prev is not None else None)
+        )
+        packed_on = parse_iso(end_pack)
+        if end_pack and (packed_on is None or packed_on <= report_day):  # "Done" counts as packed
+            continue
+        carry[key] = info
+    return carry, previous
 
 
 def trim_history(db: Session) -> None:
@@ -386,7 +431,7 @@ HAND_EDIT_FIELDS = {
     "auto_late_duration": "late_duration",
     "auto_is_late": "is_late",
 }
-HAND_EDIT_FLAGS = ("pack_cut_manual", "end_sew_manual", "end_pack_manual", "duration_manual", "late_manual")
+HAND_EDIT_FLAGS = ("pack_cut_manual", "end_sew_manual", "end_pack_manual", "duration_manual", "late_manual", "is_carry")
 
 
 def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date], reveal_edits: bool = True) -> dict:
@@ -433,6 +478,7 @@ def _item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holiday
         "duration_manual": item.duration_override is not None,
         "late_manual": item.late_override is not None,
         "is_removed": item.is_removed,
+        "is_carry": item.is_carry,
         "removed_by": item.removed_by,
         "removed_at": item.removed_at,
         "wf": wf,

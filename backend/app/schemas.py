@@ -615,6 +615,8 @@ class CloseOrderItemOut(BaseModel):
     auto_is_late: bool
     duration_manual: bool
     late_manual: bool
+    # "Tồn tuần trước": sewn before this week, still not packed out.
+    is_carry: bool
     # Removed from the report by Finishing; left out of every count/export.
     # Only Finishing accounts ever receive removed orders.
     is_removed: bool
