@@ -143,7 +143,9 @@ def update_item(
     item.updated_by = current_user.full_name
     item.updated_at = now
     db.commit()
-    return item_out(item, _line_map(db), local_today(), holiday_set(db))
+    return item_out(
+        item, _line_map(db), local_today(), holiday_set(db), reveal_edits=current_user.role == UserRole.finishing
+    )
 
 
 @router.get("/holidays", response_model=list[HolidayOut])

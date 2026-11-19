@@ -273,15 +273,94 @@ function frozenProps(layout: FrozenLayout, i: number, header: boolean) {
   return { className, style };
 }
 
+/** Late cell for Finishing: type the number of days; blank goes back to the
+ * computed value. Looks like any other value once changed. */
+function LateInput({
+  order,
+  onSave,
+  children,
+}: {
+  order: ProgressOrder;
+  onSave: (v: number | null) => Promise<void>;
+  children: React.ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const cancelled = useRef(false);
+
+  async function commit() {
+    if (cancelled.current) {
+      cancelled.current = false;
+      setEditing(false);
+      return;
+    }
+    const text = draft.trim();
+    if (text !== "" && !/^\d{1,3}$/.test(text)) {
+      alert("Nhập số ngày (số nguyên từ 0), hoặc để trống để tính tự động.");
+      return;
+    }
+    const next = text === "" ? null : Number(text);
+    const current = order.late_manual ? order.late : null;
+    if (next !== current) {
+      try {
+        await onSave(next);
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : "Không lưu được");
+        return;
+      }
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-14 rounded border border-primary bg-surface px-1 py-0.5 text-right text-xs outline-none ring-2 ring-primary/20"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(order.late_manual && order.late != null ? String(order.late) : "");
+        setEditing(true);
+      }}
+      title={
+        order.late_manual
+          ? `Sửa tay. Tính tự động: ${order.auto_late ?? "-"} ngày. Bấm, xoá trống để trả về.`
+          : "Bấm để sửa số ngày late"
+      }
+      className="min-w-[2rem] rounded px-1 text-right hover:bg-primary-soft/60"
+    >
+      {children}
+    </button>
+  );
+}
+
 function OrdersTable({
   groups,
   onUpdate,
   canEditNumbers,
+  canEditLate,
   onNumber,
 }: {
   groups: [string, ProgressOrder[]][];
   onUpdate: (order: ProgressOrder, patch: Omit<ProgressNoteUpdate, "order_key">) => Promise<void>;
   canEditNumbers: boolean;
+  canEditLate: boolean;
   onNumber: NumberSave;
 }) {
   const layout = useCompact() ? COMPACT : WIDE;
@@ -383,7 +462,9 @@ function OrdersTable({
                     {num(o.pack_cut)}
                   </td>
                   <td className={`${TD} text-right tabular-nums`}>
-                    {lateLevel(o) === "late" ? (
+                    {(() => {
+                      const shown =
+                        lateLevel(o) === "late" ? (
                       <span className="font-bold text-danger" title={`Late ${o.late} ngày (quá ${LATE_LIMIT} ngày kể từ End sew)`}>
                         {o.late}
                       </span>
@@ -397,8 +478,16 @@ function OrdersTable({
                     ) : o.late != null ? (
                       o.late
                     ) : (
-                      <span className="text-muted">{o.late_label}</span>
-                    )}
+                      <span className="text-muted">{o.late_label ?? "-"}</span>
+                    );
+                      return canEditLate ? (
+                        <LateInput order={o} onSave={(v) => onUpdate(o, { late: v })}>
+                          {shown}
+                        </LateInput>
+                      ) : (
+                        shown
+                      );
+                    })()}
                   </td>
                   <td className="border-b border-border px-1 py-1">
                     <RemarkCell value={o.ex_remark} onSave={(t) => onUpdate(o, { ex_remark: t })} />
@@ -504,8 +593,10 @@ function ProgressContent() {
         });
         return { ...prev, orders, closed_count: prev.closed_count + closedDelta };
       });
+      // The computed late value/label come from the server.
+      if ("late" in patch) load();
     },
-    [includeClosed]
+    [includeClosed, load]
   );
 
   const onNumber = useCallback<NumberSave>(
@@ -756,6 +847,7 @@ function ProgressContent() {
             groups={groups}
             onUpdate={onUpdate}
             canEditNumbers={data?.can_edit_numbers ?? false}
+            canEditLate={data?.can_edit_late ?? false}
             onNumber={onNumber}
           />
         </Card>

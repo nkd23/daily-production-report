@@ -336,7 +336,9 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
             if not include_closed:
                 continue
         line = lines.get(o.line_number)
-        late, late_label = late_days(o.end_sew, o.end_pack, today)
+        auto_late, late_label = late_days(o.end_sew, o.end_pack, today)
+        late_override = note.late_override if note else None
+        late = late_override if late_override is not None else auto_late
         qty, pack_cut, edited = effective_quantities(o, overrides.get(o.order_key, {}))
         orders.append(
             {
@@ -360,7 +362,10 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
                 "pack_cut": pack_cut,
                 "edited": edited,
                 "late": late,
-                "late_label": late_label,
+                "late_label": None if late_override is not None else late_label,
+                # Only Finishing learns that (and from what) late was changed.
+                "auto_late": auto_late if user.role == UserRole.finishing else late,
+                "late_manual": late_override is not None and user.role == UserRole.finishing,
                 "ex_remark": note.ex_remark if note else None,
                 "fin_remark": note.fin_remark if note else None,
                 "is_closed": is_closed,
@@ -386,6 +391,7 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
         "updated_at": last_run,
         "closed_count": closed_count,
         "can_edit_numbers": user.role in (UserRole.sep, UserRole.finishing),
+        "can_edit_late": user.role == UserRole.finishing,
         "sources": [
             {
                 "file_name": s.file_name,

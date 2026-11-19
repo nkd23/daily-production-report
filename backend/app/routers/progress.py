@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.deps import local_now, local_today, require_dashboard_viewer, require_finishing_editor
-from app.models import ProgressNote, User
+from app.models import ProgressNote, User, UserRole
 from app.schemas import ProgressIngest, ProgressNoteOut, ProgressNoteUpdate, ProgressNumberUpdate, ProgressResponse
 from app.services.progress import build_view, can_edit_order, ingest, set_override
 
@@ -63,6 +63,10 @@ def update_note(
         note = ProgressNote(order_key=payload.order_key, is_closed=False)
         db.add(note)
     sent = payload.model_fields_set
+    if "late" in sent and current_user.role != UserRole.finishing:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ tài khoản Finishing được sửa Late")
+    if "late" in sent:
+        note.late_override = payload.late
     if "ex_remark" in sent:
         note.ex_remark = (payload.ex_remark or "").strip() or None
     if "fin_remark" in sent:
@@ -78,6 +82,7 @@ def update_note(
         order_key=note.order_key,
         ex_remark=note.ex_remark,
         fin_remark=note.fin_remark,
+        late_override=note.late_override,
         is_closed=note.is_closed,
         closed_by=note.closed_by,
         closed_at=note.closed_at,

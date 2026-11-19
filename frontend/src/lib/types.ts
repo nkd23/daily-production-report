@@ -325,6 +325,9 @@ export interface ProgressOrder {
   edited: Partial<Record<ProgressQtyField, ProgressEdit>>;
   late: number | null;
   late_label: string | null;
+  /** The computed value, and whether Finishing replaced it. */
+  auto_late: number | null;
+  late_manual: boolean;
   ex_remark: string | null;
   fin_remark: string | null;
   is_closed: boolean;
@@ -347,6 +350,8 @@ export interface ProgressResponse {
   updated_at: string | null;
   closed_count: number;
   can_edit_numbers: boolean;
+  /** Finishing only: change the Late column. */
+  can_edit_late: boolean;
   sources: ProgressSource[];
   orders: ProgressOrder[];
 }
@@ -356,6 +361,7 @@ export interface ProgressNoteUpdate {
   ex_remark?: string;
   fin_remark?: string;
   is_closed?: boolean;
+  late?: number | null;
 }
 
 export interface ProgressNote {
@@ -365,6 +371,7 @@ export interface ProgressNote {
   is_closed: boolean;
   closed_by: string | null;
   closed_at: string | null;
+  late_override: number | null;
 }
 
 // ---------- Close order ----------

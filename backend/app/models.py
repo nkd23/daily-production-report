@@ -270,6 +270,8 @@ class ProgressNote(Base):
     order_key: Mapped[str] = mapped_column(Unicode(200), unique=True, nullable=False)
     ex_remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     fin_remark: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    # Finishing's own count for the "late" column (None = computed daily).
+    late_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     closed_by: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
     closed_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)

@@ -377,7 +377,29 @@ def effective_late(item: CloseOrderItem, today: date, holidays: set[date]) -> tu
     return duration, late, auto_duration, auto_late
 
 
-def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date]) -> dict:
+# What Finishing changed by hand stays Finishing's business: for anyone else
+# the corrected values are simply the values (no originals, no flags).
+HAND_EDIT_FIELDS = {
+    "tracker_pack_cut": "pack_cut",
+    "tracker_end_sew": "end_sew",
+    "tracker_end_pack": "end_pack",
+    "auto_late_duration": "late_duration",
+    "auto_is_late": "is_late",
+}
+HAND_EDIT_FLAGS = ("pack_cut_manual", "end_sew_manual", "end_pack_manual", "duration_manual", "late_manual")
+
+
+def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date], reveal_edits: bool = True) -> dict:
+    out = _item_out(item, lines, today, holidays)
+    if not reveal_edits:
+        for field, shown in HAND_EDIT_FIELDS.items():
+            out[field] = out[shown]
+        for flag in HAND_EDIT_FLAGS:
+            out[flag] = False
+    return out
+
+
+def _item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date]) -> dict:
     line = lines.get(item.line_number)
     wf = _effective_wf(item)
     duration, late, auto_duration, auto_late = effective_late(item, today, holidays)
@@ -468,7 +490,7 @@ def week_view(db: Session, user: User, week_start: date, today: date) -> dict | 
     # them (the report reads as if they were never there).
     show_removed = user.role == UserRole.finishing
     items = [
-        item_out(i, lines, today, holidays)
+        item_out(i, lines, today, holidays, reveal_edits=show_removed)
         for i in db.scalars(select(CloseOrderItem).where(CloseOrderItem.week_start == week_start)).all()
         if (allowed is None or i.line_number in allowed) and (show_removed or not i.is_removed)
     ]

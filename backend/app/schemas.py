@@ -426,12 +426,15 @@ class ProgressNoteUpdate(BaseModel):
     ex_remark: str | None = Field(default=None, max_length=1000)
     fin_remark: str | None = Field(default=None, max_length=1000)
     is_closed: bool | None = None
+    # Finishing only; None goes back to the computed value.
+    late: int | None = Field(default=None, ge=0, le=999)
 
 
 class ProgressNoteOut(BaseModel):
     order_key: str
     ex_remark: str | None
     fin_remark: str | None
+    late_override: int | None
     is_closed: bool
     closed_by: str | None
     closed_at: datetime | None
@@ -479,6 +482,9 @@ class ProgressOrderOut(BaseModel):
     edited: dict[str, ProgressEditOut]
     late: int | None
     late_label: str | None
+    # The computed value, and whether Finishing replaced it.
+    auto_late: int | None
+    late_manual: bool
     ex_remark: str | None
     fin_remark: str | None
     # Closed by hand ("Đóng đơn"); only returned when closed orders are asked for.
@@ -502,6 +508,7 @@ class ProgressResponse(BaseModel):
     updated_at: datetime | None
     closed_count: int
     can_edit_numbers: bool
+    can_edit_late: bool
     sources: list[ProgressSourceOut]
     orders: list[ProgressOrderOut]
 
