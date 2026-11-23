@@ -37,7 +37,7 @@ function ToTruongContent() {
     load();
   }, [load]);
 
-  const submittedCount = items?.filter((i) => i.report?.is_submitted).length ?? 0;
+  const submittedCount = items?.filter((i) => i.parts_submitted.length > 0).length ?? 0;
   const total = items?.length ?? 0;
 
   return (
@@ -70,7 +70,7 @@ function ToTruongContent() {
         <div className="flex flex-col gap-4">
           {items.map((item) => (
             <LineEntryCard
-              key={item.line.id}
+              key={`${item.line.id}-${reportDate}`}
               item={item}
               reportDate={reportDate}
               onSubmitted={load}

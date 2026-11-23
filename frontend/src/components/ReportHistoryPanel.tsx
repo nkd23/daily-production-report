@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { History, Trash2, ClipboardEdit, SlidersHorizontal } from "lucide-react";
 import { Card } from "./ui";
 import { api } from "@/lib/api";
-import type { ReportHistoryEntry, ReportHistoryValues } from "@/lib/types";
+import type { ReportHistoryEntry, ReportHistoryValues, LinePart } from "@/lib/types";
 
 const FIELD_LABELS: Record<keyof ReportHistoryValues, string> = {
   shift_count: "Số ca chạy",
@@ -67,13 +67,21 @@ function formatDateTime(iso: string) {
   });
 }
 
-export function ReportHistoryPanel({ lineId, reportDate }: { lineId: number; reportDate: string }) {
+export function ReportHistoryPanel({
+  lineId,
+  reportDate,
+  part = "AB",
+}: {
+  lineId: number;
+  reportDate: string;
+  part?: LinePart;
+}) {
   const [entries, setEntries] = useState<ReportHistoryEntry[] | null>(null);
 
   useEffect(() => {
     setEntries(null);
-    api.getReportHistory(lineId, reportDate).then(setEntries);
-  }, [lineId, reportDate]);
+    api.getReportHistory(lineId, reportDate, part).then(setEntries);
+  }, [lineId, reportDate, part]);
 
   return (
     <Card className="p-4">

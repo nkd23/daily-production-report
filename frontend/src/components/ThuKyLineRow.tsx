@@ -17,15 +17,15 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
   useEffect(() => {
     if (!expanded) return;
     setDetail(null);
-    api.getLineReport(summary.line_id, reportDate).then(setDetail);
-  }, [expanded, summary.line_id, reportDate]);
+    api.getLineReport(summary.line_id, reportDate, summary.part).then(setDetail);
+  }, [expanded, summary.line_id, summary.part, reportDate]);
 
   async function toggleLock() {
     setLockLoading(true);
     try {
       const nextLocked = !(detail?.report?.is_locked ?? summary.is_locked);
-      await api.setLockByLine(summary.line_id, reportDate, nextLocked);
-      const refreshed = await api.getLineReport(summary.line_id, reportDate);
+      await api.setLockByLine(summary.line_id, reportDate, nextLocked, summary.part);
+      const refreshed = await api.getLineReport(summary.line_id, reportDate, summary.part);
       setDetail(refreshed);
       onChanged();
     } finally {
@@ -96,11 +96,12 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
             </div>
             {detail ? (
               <LineEntryCard
+                key={`${detail.line.id}-${reportDate}-${detail.part}`}
                 item={detail}
                 reportDate={reportDate}
                 onSubmitted={() => {
                   onChanged();
-                  api.getLineReport(summary.line_id, reportDate).then(setDetail);
+                  api.getLineReport(summary.line_id, reportDate, summary.part).then(setDetail);
                 }}
               />
             ) : (
@@ -108,7 +109,7 @@ export function ThuKyLineRow({ summary, reportDate, onChanged }: { summary: Line
             )}
             {showHistory ? (
               <div className="mt-3">
-                <ReportHistoryPanel lineId={summary.line_id} reportDate={reportDate} />
+                <ReportHistoryPanel lineId={summary.line_id} reportDate={reportDate} part={summary.part} />
               </div>
             ) : null}
           </td>

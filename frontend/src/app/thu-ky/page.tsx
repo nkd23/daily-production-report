@@ -81,7 +81,7 @@ function ThuKyContent() {
             </thead>
             <tbody>
               {data?.lines.map((line) => (
-                <ThuKyLineRow key={line.line_id} summary={line} reportDate={reportDate} onChanged={load} />
+                <ThuKyLineRow key={`${line.line_id}-${line.part}`} summary={line} reportDate={reportDate} onChanged={load} />
               ))}
               {data && data.lines.length === 0 ? (
                 <tr>

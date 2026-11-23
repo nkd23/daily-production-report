@@ -10,7 +10,9 @@ the old report's formulas):
 - an order counts only when ALL its colours have an End Sew date; its End
   Sew is the latest of them, its End Pack the latest colour End Pack (blank
   while any colour is still unpacked);
-- a JO already reported in an earlier week is not reported again;
+- an order belongs to the week of its End Sew, whatever an earlier report
+  said: one listed early (e.g. before its last colour was sewn) moves to the
+  right week when that week is published, keeping Finishing's notes;
 - Late duration = working days (Monday-Saturday, minus holidays) from End
   Sew to End Pack - or to today while unpacked - minus 1. More than 3 is
   late; exactly 3 is on time only for WF & TAP orders (Product Category
@@ -27,7 +29,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from app.models import CloseOrderItem, CloseOrderReportedJo, CloseOrderRow, CloseOrderWeek, Holiday, Line, User, UserRole
+from app.models import CloseOrderItem, CloseOrderRow, CloseOrderWeek, Holiday, Line, User, UserRole
 from app.services.progress import normalize_line, owner_from_file, parse_iso, visible_line_numbers
 
 LATE_AFTER_DAYS = 3
@@ -37,6 +39,8 @@ HISTORY_WEEKS = 6
 CARRY_LOOKBACK_DAYS = 56
 # Finishing's notes on an order that carry over when it is listed again.
 CARRIED_NOTE_FIELDS = ("remark", "department", "wf", "end_sew_override", "end_pack_override", "pack_cut_override")
+# ...and, when an order moves to its End Sew week, whether Finishing removed it.
+MOVED_NOTE_FIELDS = (*CARRIED_NOTE_FIELDS, "is_removed", "removed_by", "removed_at")
 WF_CATEGORY = "WWF_T"
 DEPARTMENTS = ("Cutting", "Sewing", "Washing", "Finishing", "Khác")
 ROW_INT_FIELDS = ("order_qty", "cut_qty", "sew_qty", "pack_qty", "pack_cut")
@@ -235,18 +239,25 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
         (i.line_number, i.jo.upper()): i
         for i in db.scalars(select(CloseOrderItem).where(CloseOrderItem.week_start == week_start)).all()
     }
-    reported_jos = {
-        jo.upper()
-        for jo in db.scalars(select(CloseOrderItem.jo).where(CloseOrderItem.week_start != week_start)).all()
-    } | {jo.upper() for jo in db.scalars(select(CloseOrderReportedJo.jo)).all()}
     _refresh(db, orders)
 
-    wanted = {
-        key: info
-        for key, info in orders.items()
-        if start <= info["end_sew"] <= end and key[1] not in reported_jos
-    }
+    # End Sew decides the week - an earlier report doesn't keep an order out.
+    wanted = {key: info for key, info in orders.items() if start <= info["end_sew"] <= end}
     carry, previous = _carried_orders(db, orders, week_start, now.date())
+
+    # Orders listed in another week although their End Sew falls in this one
+    # (reported early, e.g. in the old Excel report before the last colour
+    # was sewn) move here, bringing Finishing's notes along.
+    moved: dict[tuple[str, str], tuple[date, dict]] = {}
+    for other in db.scalars(
+        select(CloseOrderItem).where(CloseOrderItem.week_start != week_start, CloseOrderItem.is_carry == False)  # noqa: E712
+    ).all():
+        key = (other.line_number, other.jo.upper())
+        if key not in wanted:
+            continue
+        if key not in moved or other.week_start > moved[key][0]:
+            moved[key] = (other.week_start, {f: getattr(other, f) for f in MOVED_NOTE_FIELDS})
+        db.delete(other)
     for key, item in kept.items():
         if key not in wanted and key not in carry:
             db.delete(item)
@@ -260,8 +271,10 @@ def publish_week(db: Session, week_start: date, now: datetime, errors: list[str]
                 item.is_carry = is_carry
                 continue
             row = {"week_start": week_start, "line_number": line, "jo": jo, "source": "web", "is_carry": is_carry, **info}
-            prev = previous.get((line, jo))
-            if prev is not None:
+            if not is_carry and (line, jo) in moved:
+                row.update(moved[(line, jo)][1])
+            elif is_carry and (line, jo) in previous:
+                prev = previous[(line, jo)]
                 row.update({f: getattr(prev, f) for f in CARRIED_NOTE_FIELDS})
             new_items.append(row)
     if new_items:
@@ -314,17 +327,12 @@ def _carried_orders(db: Session, orders: dict, week_start: date, report_day: dat
 
 
 def trim_history(db: Session) -> None:
-    """Keep the HISTORY_WEEKS most recent published weeks. Older weeks are
-    deleted; their JOs are remembered so they are never reported again."""
+    """Keep the HISTORY_WEEKS most recent published weeks; older weeks are
+    deleted."""
     published = db.scalars(
         select(CloseOrderWeek).where(CloseOrderWeek.is_published == True).order_by(CloseOrderWeek.week_start.desc())  # noqa: E712
     ).all()
-    known = {jo.upper() for jo in db.scalars(select(CloseOrderReportedJo.jo)).all()}
     for week in published[HISTORY_WEEKS:]:
-        for jo in db.scalars(select(CloseOrderItem.jo).where(CloseOrderItem.week_start == week.week_start)).all():
-            if jo.upper() not in known:
-                known.add(jo.upper())
-                db.add(CloseOrderReportedJo(jo=jo.upper(), week_start=week.week_start))
         db.execute(delete(CloseOrderItem).where(CloseOrderItem.week_start == week.week_start))
         db.delete(week)
 

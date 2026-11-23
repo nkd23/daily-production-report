@@ -28,7 +28,14 @@ from app.schemas import (
     WeeklyResponse,
     WeeklyWipReasonTotals,
 )
-from app.services.aggregation import _avg, _shift_weighted_avg, active_lines, build_kpi_summary, summarize_lines
+from app.services.aggregation import (
+    _avg,
+    _shift_weighted_avg,
+    active_lines,
+    build_kpi_summary,
+    group_reports_by_line,
+    summarize_lines,
+)
 
 
 def week_bounds(any_day: date) -> tuple[date, date]:
@@ -40,18 +47,28 @@ def _completion(actual: int, target: int) -> float | None:
     return round(actual / target * 100, 1) if target else None
 
 
-def _weekly_line(line_days: list[LineDaySummary]) -> WeeklyLineSummary:
+def _weekly_line(line_days: list[LineDaySummary], line_number: str, dates: list[date]) -> WeeklyLineSummary:
+    """A line's week; the halves of a split line (A/B) count as the line.
+    dates[i] is the day of line_days[i]."""
     first = line_days[0]
     submitted = [d for d in line_days if d.is_submitted]
+    sub_dates = [day for d, day in zip(line_days, dates) if d.is_submitted]
     target_output = sum(d.target_output for d in submitted)
     out_fin_fin = sum((d.out_fin_fin or 0) for d in submitted)
-    last = submitted[-1] if submitted else None
+    # WIP is a stock count: the last submitted day's, both halves together.
+    last_day = max(sub_dates) if sub_dates else None
+    last_rows = [d for d, day in zip(submitted, sub_dates) if day == last_day]
+
+    def last_wip(field: str) -> int | None:
+        values = [getattr(d, field) for d in last_rows if getattr(d, field) is not None]
+        return sum(values) if values else None
+
     return WeeklyLineSummary(
         line_id=first.line_id,
-        line_number=first.line_number,
+        line_number=line_number,
         executive_name=first.executive_name,
         pu_group=first.pu_group,
-        days_submitted=len(submitted),
+        days_submitted=len(set(sub_dates)),
         shift_total=sum(d.shift_weight for d in submitted),
         target_output=target_output,
         target_eff=_shift_weighted_avg([(d.shift_weight, d.target_eff) for d in submitted if d.target_eff]),
@@ -62,10 +79,10 @@ def _weekly_line(line_days: list[LineDaySummary]) -> WeeklyLineSummary:
         eff_fin=_shift_weighted_avg([(d.eff_fin_weight, d.eff_fin) for d in submitted]),
         completion_rate=_completion(out_fin_fin, target_output),
         var=sum((d.var or 0) for d in submitted),
-        wip_dip=last.wip_dip if last else None,
-        wip_wash=last.wip_wash if last else None,
-        wip_pre_pi=last.wip_pre_pi if last else None,
-        wip_post_pi=last.wip_post_pi if last else None,
+        wip_dip=last_wip("wip_dip"),
+        wip_wash=last_wip("wip_wash"),
+        wip_pre_pi=last_wip("wip_pre_pi"),
+        wip_post_pi=last_wip("wip_post_pi"),
         wip_machine_days=sum(1 for d in submitted if d.wip_reason_machine),
         wip_line_spread_days=sum(1 for d in submitted if d.wip_reason_line_spread),
         wip_semi_finished_days=sum(1 for d in submitted if d.wip_reason_semi_finished),
@@ -159,25 +176,31 @@ def build_weekly(db: Session, any_day: date, executive_scope: str | None = None)
     # Two queries for the whole week (lines + that week's reports) rather
     # than two per day.
     lines = active_lines(db)
-    reports_by_day: dict[date, dict[int, DailyReport]] = {day: {} for day in days}
+    week_reports: dict[date, list[DailyReport]] = {day: [] for day in days}
     for r in db.scalars(
         select(DailyReport).where(DailyReport.report_date >= week_start, DailyReport.report_date <= week_end)
     ):
-        reports_by_day[r.report_date][r.line_id] = r
+        week_reports[r.report_date].append(r)
 
     lines_per_day: list[list[LineDaySummary]] = []
     for day in days:
-        day_lines = summarize_lines(lines, reports_by_day[day], day)
+        day_lines = summarize_lines(lines, group_reports_by_line(week_reports[day]), day)
         if executive_scope is not None:
             day_lines = [l for l in day_lines if l.executive_name == executive_scope]
         lines_per_day.append(day_lines)
 
     # Line order follows the daily summaries (PU, Executive, Line number).
     days_by_line: dict[int, list[LineDaySummary]] = {}
-    for day_lines in lines_per_day:
+    dates_by_line: dict[int, list[date]] = {}
+    for day, day_lines in zip(days, lines_per_day):
         for l in day_lines:
             days_by_line.setdefault(l.line_id, []).append(l)
-    week_lines = [_weekly_line(line_days) for line_days in days_by_line.values()]
+            dates_by_line.setdefault(l.line_id, []).append(day)
+    line_numbers = {line.id: line.line_number for line in lines}
+    week_lines = [
+        _weekly_line(line_days, line_numbers[line_id], dates_by_line[line_id])
+        for line_id, line_days in days_by_line.items()
+    ]
 
     daily_kpis = [build_kpi_summary(day_lines) for day_lines in lines_per_day]
     day_points = [

@@ -387,7 +387,7 @@ function DashboardContent() {
                     </thead>
                     <tbody>
                       {wipReasonLines.map((l) => (
-                        <tr key={l.line_id} className="border-b border-border last:border-0">
+                        <tr key={`${l.line_id}-${l.part}`} className="border-b border-border last:border-0">
                           <td className="py-2 pr-3 font-medium">{l.line_number}</td>
                           <td className="py-2 pr-3 text-muted">{l.executive_name}</td>
                           <td className="py-2 pr-3">
@@ -464,7 +464,7 @@ function DashboardContent() {
                 </thead>
                 <tbody>
                   {data.lines.map((l) => (
-                    <tr key={l.line_id} className="border-b border-border last:border-0">
+                    <tr key={`${l.line_id}-${l.part}`} className="border-b border-border last:border-0">
                       <td className="px-5 py-2 font-medium">{l.line_number}</td>
                       <td className="px-5 py-2 text-muted">{l.executive_name}</td>
                       <td className="px-5 py-2">

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import VIEW_ONLY_ROLES, get_current_user, local_now, local_today, require_thu_ky_or_sep, resolve_effective_lock
 from app.models import DailyReport, Line, ReportHistory, User, UserRole
+from app.services.line_parts import PART_PATTERN, conflicting_parts, part_label, part_order
 from app.services.targets import entry_defaults, resolve_target
 from app.schemas import (
     DailyReportInput,
@@ -48,6 +49,7 @@ def _record_history(
     *,
     line_id: int,
     report_date: date,
+    part: str = "AB",
     action: str,
     changed_by: int,
     old: dict | None,
@@ -59,6 +61,7 @@ def _record_history(
         ReportHistory(
             line_id=line_id,
             report_date=report_date,
+            part=part,
             action=action,
             changed_by=changed_by,
             old_values=json.dumps(old) if old is not None else None,
@@ -96,17 +99,60 @@ def _line_out(db: Session, line: Line, report_date: date, viewer: User) -> LineO
     return out
 
 
-def _with_report(db: Session, line: Line, report: DailyReport | None, report_date: date, viewer: User, is_editable: bool):
+def _with_report(
+    db: Session,
+    line: Line,
+    report: DailyReport | None,
+    report_date: date,
+    viewer: User,
+    is_editable: bool,
+    part: str = "AB",
+    day_reports: list[DailyReport] | None = None,
+):
     defaults = None
     if report is None or not report.is_submitted:
         d = entry_defaults(db, line.id, report_date)
         defaults = EntryDefaults(**d) if d else None
+    if day_reports is None:
+        day_reports = _day_reports(db, line.id, report_date)
     return LineWithReportOut(
         line=_line_out(db, line, report_date, viewer),
+        part=part,
+        parts_submitted=sorted({r.part for r in day_reports if r.is_submitted}, key=part_order),
         report=_report_out(report, line, viewer) if report is not None else None,
         is_editable=is_editable,
         defaults=defaults,
     )
+
+
+def _day_reports(db: Session, line_id: int, report_date: date) -> list[DailyReport]:
+    """Every part's row (AB, A, B) of a line on a day."""
+    return list(
+        db.scalars(
+            select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
+        ).all()
+    )
+
+
+def _part_row(rows: list[DailyReport], part: str) -> DailyReport | None:
+    return next((r for r in rows if r.part == part), None)
+
+
+def _default_part(rows: list[DailyReport]) -> str:
+    """The part a line's entry opens on: whatever was submitted that day
+    (AB first), else the whole line."""
+    submitted = sorted((r.part for r in rows if r.is_submitted), key=part_order)
+    return submitted[0] if submitted else "AB"
+
+
+def _row_locked(row: DailyReport | None, rows: list[DailyReport], report_date: date) -> bool:
+    """A part with no row yet follows any unlock/lock Thư ký set on the day."""
+    if row is not None:
+        return resolve_effective_lock(row.report_date, row.is_locked, row.secretary_override)
+    override = next((r for r in rows if r.secretary_override), None)
+    if override is not None:
+        return override.is_locked
+    return resolve_effective_lock(report_date, False, False)
 
 
 def _get_line_or_404(db: Session, line_id: int) -> Line:
@@ -164,35 +210,38 @@ def get_my_lines(
                 DailyReport.report_date == report_date,
             )
         ).all()
-        reports = {r.line_id: r for r in report_rows}
+        for r in report_rows:
+            reports.setdefault(r.line_id, []).append(r)
 
     result = []
     for line in lines:
-        report = reports.get(line.id)
-        locked = (
-            resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-            if report is not None
-            else resolve_effective_lock(report_date, False, False)
-        )
+        rows = reports.get(line.id, [])
+        part = _default_part(rows)
+        report = _part_row(rows, part)
+        locked = _row_locked(report, rows, report_date)
         is_editable = current_user.role != UserRole.to_truong or not locked
-        result.append(_with_report(db, line, report, report_date, current_user, is_editable))
+        result.append(_with_report(db, line, report, report_date, current_user, is_editable, part, rows))
     return result
 
 
-@router.get("/lines/{line_id}", response_model=LineWithReportOut, dependencies=[Depends(require_thu_ky_or_sep)])
+@router.get("/lines/{line_id}", response_model=LineWithReportOut)
 def get_line_report(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
+    part: str | None = Query(default=None, pattern=PART_PATTERN),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Fetch a single line/date report for Thư ký/Sếp to inspect or submit on
-    behalf of a Tổ trưởng ("nhập hộ")."""
+    """One line/date/part report: for Thư ký/Sếp to inspect or submit on
+    behalf of a Tổ trưởng ("nhập hộ"), and for the line's Tổ trưởng to switch
+    between the whole line and its A/B halves. No part = the one submitted."""
     line = _get_line_or_404(db, line_id)
-    report = db.scalar(
-        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
-    )
-    return _with_report(db, line, report, report_date, current_user, is_editable=True)
+    _assert_line_access(current_user, line)
+    rows = _day_reports(db, line_id, report_date)
+    part = part or _default_part(rows)
+    report = _part_row(rows, part)
+    is_editable = current_user.role != UserRole.to_truong or not _row_locked(report, rows, report_date)
+    return _with_report(db, line, report, report_date, current_user, is_editable, part, rows)
 
 
 @router.get("/lines/{line_id}/recent", response_model=list[DailyReportOut])
@@ -234,6 +283,7 @@ def submit_report(
     line_id: int,
     payload: DailyReportInput,
     report_date: date = Query(default_factory=local_today),
+    part: str = Query(default="AB", pattern=PART_PATTERN),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -241,18 +291,25 @@ def submit_report(
     _assert_line_access(current_user, line)
     _assert_date_allowed(current_user, report_date)
 
-    report = db.scalar(
-        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
-    )
+    rows = _day_reports(db, line_id, report_date)
+    clash = [r.part for r in rows if r.is_submitted and r.part in conflicting_parts(part)]
+    if clash:
+        existing = ", ".join(part_label(line.line_number, p) for p in sorted(clash, key=part_order))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ngày này đã nhập theo {existing}. Xóa báo cáo đó trước nếu muốn nhập {part_label(line.line_number, part)}.",
+        )
+    report = _part_row(rows, part)
 
-    if report is not None:
-        effective_locked = resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-        if current_user.role == UserRole.to_truong and effective_locked:
-            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-    else:
-        if current_user.role == UserRole.to_truong and resolve_effective_lock(report_date, False, False):
-            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
-        report = DailyReport(line_id=line_id, report_date=report_date)
+    if current_user.role == UserRole.to_truong and _row_locked(report, rows, report_date):
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
+    if report is None:
+        report = DailyReport(line_id=line_id, report_date=report_date, part=part)
+        # A new half follows the unlock Thư ký gave the day, if any.
+        override = next((r for r in rows if r.secretary_override), None)
+        if override is not None:
+            report.is_locked = override.is_locked
+            report.secretary_override = True
         db.add(report)
 
     if (payload.eff_sew or 0) >= MAX_EFF_PERCENT or (payload.eff_fin or 0) >= MAX_EFF_PERCENT:
@@ -309,7 +366,7 @@ def submit_report(
     report.submitted_at = local_now().replace(tzinfo=None)
 
     _record_history(
-        db, line_id=line_id, report_date=report_date, action="submit",
+        db, line_id=line_id, report_date=report_date, part=part, action="submit",
         changed_by=current_user.id, old=old_snapshot, new=_snapshot(report),
     )
 
@@ -322,6 +379,7 @@ def submit_report(
 def delete_report(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
+    part: str = Query(default="AB", pattern=PART_PATTERN),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -330,9 +388,7 @@ def delete_report(
     line = _get_line_or_404(db, line_id)
     _assert_line_access(current_user, line)
 
-    report = db.scalar(
-        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
-    )
+    report = _part_row(_day_reports(db, line_id, report_date), part)
     if report is None:
         return
 
@@ -341,7 +397,7 @@ def delete_report(
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Dữ liệu ngày này đã bị khoá, liên hệ Thư ký để mở khoá")
 
     _record_history(
-        db, line_id=line_id, report_date=report_date, action="delete",
+        db, line_id=line_id, report_date=report_date, part=part, action="delete",
         changed_by=current_user.id, old=_snapshot(report), new=None,
     )
 
@@ -355,13 +411,14 @@ def delete_report(
 def get_report_history(
     line_id: int,
     report_date: date = Query(default_factory=local_today),
+    part: str = Query(default="AB", pattern=PART_PATTERN),
     db: Session = Depends(get_db),
 ):
-    """Every submit/target-update/delete for this line on this date, newest
-    first - Thư ký/Sếp-only audit trail."""
+    """Every submit/target-update/delete for this line/part on this date,
+    newest first - Thư ký/Sếp-only audit trail."""
     rows = db.scalars(
         select(ReportHistory)
-        .where(ReportHistory.line_id == line_id, ReportHistory.report_date == report_date)
+        .where(ReportHistory.line_id == line_id, ReportHistory.report_date == report_date, ReportHistory.part == part)
         .order_by(ReportHistory.changed_at.desc())
     ).all()
     return [
@@ -400,21 +457,24 @@ def set_lock_by_line(
     line_id: int,
     payload: UnlockRequest,
     report_date: date = Query(default_factory=local_today),
+    part: str = Query(default="AB", pattern=PART_PATTERN),
     current_user: User = Depends(require_thu_ky_or_sep),
     db: Session = Depends(get_db),
 ):
     """Unlock (or lock) a line/date even if Tổ trưởng has not submitted
     anything yet, so a report row may not exist. Used by Thư ký to let a Tổ
-    trưởng submit late after the automatic lock hour has passed."""
+    trưởng submit late after the automatic lock hour has passed. Applies to
+    every part of the line that day (AB, A, B)."""
     line = _get_line_or_404(db, line_id)
-    report = db.scalar(
-        select(DailyReport).where(DailyReport.line_id == line_id, DailyReport.report_date == report_date)
-    )
+    rows = _day_reports(db, line_id, report_date)
+    report = _part_row(rows, part)
     if report is None:
-        report = DailyReport(line_id=line_id, report_date=report_date)
+        report = DailyReport(line_id=line_id, report_date=report_date, part=part)
         db.add(report)
-    report.is_locked = payload.is_locked
-    report.secretary_override = True
+        rows.append(report)
+    for row in rows:
+        row.is_locked = payload.is_locked
+        row.secretary_override = True
     db.commit()
     db.refresh(report)
     return _report_out(report, line, current_user)

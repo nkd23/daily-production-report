@@ -407,7 +407,7 @@ function DuLieuSanXuatContent() {
                     {pu.execs.map((exec) => (
                       <Fragment key={exec.executive_name}>
                         {exec.lines.map((line) => (
-                          <LineRow key={line.line_id} line={line} />
+                          <LineRow key={`${line.line_id}-${line.part}`} line={line} />
                         ))}
                         {hasActiveFilter ? null : (
                           <SubtotalRow

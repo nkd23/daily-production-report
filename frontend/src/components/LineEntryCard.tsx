@@ -6,7 +6,8 @@ import { Badge, Button, Input, Label, Textarea } from "./ui";
 import { BuyerInput } from "./BuyerInput";
 import { SubmissionHistory } from "./SubmissionHistory";
 import { api, ApiError } from "@/lib/api";
-import type { DailyReportInput, LineWithReport } from "@/lib/types";
+import { partLabel } from "@/lib/types";
+import type { DailyReportInput, LinePart, LineWithReport } from "@/lib/types";
 
 function toFieldValue(v: number | null): string {
   return v === null || v === undefined ? "" : String(v);
@@ -90,7 +91,42 @@ export function LineEntryCard({
   reportDate: string;
   onSubmitted: () => void;
 }) {
-  const { line, report, is_editable, defaults } = item;
+  // Which part of the line this entry is for: the whole line (AB) or one
+  // half of a split line (A / B). The parent's item covers the part that
+  // was submitted that day; another part is fetched when picked.
+  const [part, setPart] = useState<LinePart>(item.part);
+  const [fetched, setFetched] = useState<LineWithReport | null>(null);
+  const [loadingPart, setLoadingPart] = useState(false);
+  const view = part === item.part ? item : fetched?.part === part ? fetched : item;
+  const { line, report, is_editable, defaults } = view;
+  const partsSubmitted = view.parts_submitted ?? [];
+  const label = partLabel(line.line_number, part);
+
+  async function loadPart(p: LinePart) {
+    setLoadingPart(true);
+    try {
+      setFetched(await api.getLineReport(line.id, reportDate, p));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Không tải được số liệu");
+    } finally {
+      setLoadingPart(false);
+    }
+  }
+
+  function choosePart(p: LinePart) {
+    if (p === part) return;
+    setPart(p);
+    if (p !== item.part) void loadPart(p);
+  }
+
+  /** A whole-line report and half-line reports can't both exist on a day. */
+  function partBlocked(p: LinePart): string | null {
+    if (p === part) return null;
+    const clash = p === "AB" ? partsSubmitted.filter((x) => x !== "AB") : partsSubmitted.filter((x) => x === "AB");
+    return clash.length
+      ? `Ngày này đã nhập theo ${clash.map((x) => partLabel(line.line_number, x)).join(", ")} - xóa báo cáo đó trước nếu muốn nhập ${partLabel(line.line_number, p)}`
+      : null;
+  }
 
   // A day with nothing submitted yet starts from the line's last submission:
   // buyer, shift count and SAM rarely change day to day.
@@ -140,7 +176,7 @@ export function LineEntryCard({
     setJustSaved(false);
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [line.id, reportDate]);
+  }, [line.id, reportDate, view.part, loadingPart]);
 
   // Every numeric field must be filled in (0 if there's truly no data for the
   // day). An explicit 0 on EFF-SEW/EFF-FIN is still excluded from the
@@ -212,10 +248,11 @@ export function LineEntryCard({
     }
     setSaving(true);
     try {
-      await api.submitReport(line.id, reportDate, form);
+      await api.submitReport(line.id, reportDate, form, part);
       setJustSaved(true);
       setHistoryVersion((v) => v + 1);
       onSubmitted();
+      if (part !== item.part) void loadPart(part);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Có lỗi xảy ra, vui lòng thử lại");
     } finally {
@@ -224,19 +261,20 @@ export function LineEntryCard({
   }
 
   const submitted = report?.is_submitted ?? false;
-  const locked = !is_editable;
+  const locked = !is_editable || loadingPart;
 
   async function handleDelete() {
-    if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${line.line_number} ngày này?\nKhông thể hoàn tác.`)) {
+    if (!window.confirm(`Xóa toàn bộ số liệu đã nhập cho line ${label} ngày này?\nKhông thể hoàn tác.`)) {
       return;
     }
     setDeleting(true);
     setError(null);
     try {
-      await api.deleteReport(line.id, reportDate);
+      await api.deleteReport(line.id, reportDate, part);
       setForm(blankForm());
       setHistoryVersion((v) => v + 1);
       onSubmitted();
+      if (part !== item.part) void loadPart(part);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Không xóa được, vui lòng thử lại");
     } finally {
@@ -249,12 +287,33 @@ export function LineEntryCard({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold">{line.line_number}</h3>
+            <h3 className="text-base font-semibold">{label}</h3>
             <Badge tone={line.pu_group === "PU1" ? "pu1" : "pu2"}>{line.pu_group}</Badge>
             <span className="text-sm text-muted">{line.executive_name}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Whole line, or one half when the line is split (often only shift A). */}
+          <div className="flex overflow-hidden rounded-lg border border-border" role="group" aria-label="Phần chuyền">
+            {(["AB", "A", "B"] as LinePart[]).map((p) => {
+              const blocked = partBlocked(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  disabled={!!blocked || loadingPart}
+                  onClick={() => choosePart(p)}
+                  title={blocked ?? (p === "AB" ? "Cả chuyền" : `Chuyền tách - chỉ ${partLabel(line.line_number, p)}`)}
+                  className={`px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    part === p ? "bg-primary text-primary-foreground" : "bg-surface text-muted hover:bg-slate-100"
+                  }`}
+                >
+                  {partLabel(line.line_number, p)}
+                  {partsSubmitted.includes(p) && part !== p ? " ✓" : ""}
+                </button>
+              );
+            })}
+          </div>
           {locked ? (
             <Badge tone="default">
               <span className="flex items-center gap-1">
@@ -525,7 +584,7 @@ export function LineEntryCard({
         </div>
       </form>
 
-      <SubmissionHistory lineId={line.id} version={historyVersion} onDeleted={onSubmitted} />
+      <SubmissionHistory lineId={line.id} lineNumber={line.line_number} version={historyVersion} onDeleted={onSubmitted} />
     </div>
   );
 }

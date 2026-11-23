@@ -81,11 +81,15 @@ class Line(Base):
 
 class DailyReport(Base):
     __tablename__ = "daily_reports"
-    __table_args__ = (UniqueConstraint("line_id", "report_date", name="uq_line_date"),)
+    __table_args__ = (UniqueConstraint("line_id", "report_date", "part", name="uq_line_date_part"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False)
     report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
+    # Which part of the line ran: "AB" (the whole line, the usual case), or
+    # "A" / "B" when the line is split - then a day may have an A and a B
+    # report (shown as e.g. "39A" / "39B"), but never alongside an AB one.
+    part: Mapped[str] = mapped_column(Unicode(2), nullable=False, default="AB")
     # How many shifts (1 or 2) the line ran this day - the factory's "tổng số
     # Ca" column, entered directly by the Tổ trưởng rather than inferred from
     # how many separate submissions exist (there is only ever one row per
@@ -192,6 +196,7 @@ class ReportHistory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     line_id: Mapped[int] = mapped_column(ForeignKey("lines.id"), nullable=False, index=True)
     report_date: Mapped["Date"] = mapped_column(Date, nullable=False, index=True)
+    part: Mapped[str] = mapped_column(Unicode(2), nullable=False, default="AB")
     action: Mapped[str] = mapped_column(Unicode(20), nullable=False)  # "submit" | "target_update" | "delete"
     changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     changed_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
@@ -399,8 +404,9 @@ class CloseOrderItem(Base):
 
 
 class CloseOrderReportedJo(Base):
-    """JOs of Close order weeks dropped by the 6-week history limit, kept
-    only so those JOs are still never reported a second time."""
+    """No longer used: JOs of weeks dropped by the 6-week history limit,
+    from when an earlier report kept a JO out of later weeks. Orders now go
+    to the week of their End Sew (app.services.close_order)."""
 
     __tablename__ = "close_order_reported_jos"
 

@@ -142,6 +142,7 @@ class DailyReportOut(BaseModel):
     id: int
     line_id: int
     report_date: date
+    part: str = "AB"
     shift_count: int
     buyer: str | None
     sam: float | None
@@ -175,6 +176,10 @@ class EntryDefaults(BaseModel):
 
 class LineWithReportOut(BaseModel):
     line: LineOut
+    # Which part this entry is for ("AB" whole line, or "A" / "B") and which
+    # parts already have a submitted report that day.
+    part: str = "AB"
+    parts_submitted: list[str] = Field(default_factory=list)
     report: DailyReportOut | None
     is_editable: bool
     defaults: EntryDefaults | None = None
@@ -196,6 +201,9 @@ class ReportHistoryOut(BaseModel):
 # ---------- Aggregated / dashboard ----------
 class LineDaySummary(BaseModel):
     line_id: int
+    # "AB", or "A"/"B" for half of a split line; line_number is then the
+    # half's label (e.g. "39A").
+    part: str = "AB"
     line_number: str
     executive_name: str
     pu_group: PuGroup

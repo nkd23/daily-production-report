@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { History, Trash2 } from "lucide-react";
 import { Badge } from "./ui";
 import { api, ApiError } from "@/lib/api";
+import { partLabel } from "@/lib/types";
 import type { DailyReport } from "@/lib/types";
 
 function wipReasonBadges(r: DailyReport) {
@@ -43,10 +44,12 @@ function pct(n: number | null) {
 // successful submit/delete so a freshly-entered day shows up right away.
 export function SubmissionHistory({
   lineId,
+  lineNumber,
   version,
   onDeleted,
 }: {
   lineId: number;
+  lineNumber: string;
   version: number;
   onDeleted?: () => void;
 }) {
@@ -58,12 +61,12 @@ export function SubmissionHistory({
   }, [lineId, version]);
 
   async function handleDeleteRow(r: DailyReport) {
-    if (!window.confirm(`Xóa số liệu đã nhập ngày ${formatDate(r.report_date)}?\nKhông thể hoàn tác.`)) {
+    if (!window.confirm(`Xóa số liệu ${partLabel(lineNumber, r.part)} đã nhập ngày ${formatDate(r.report_date)}?\nKhông thể hoàn tác.`)) {
       return;
     }
     setDeletingId(r.id);
     try {
-      await api.deleteReport(lineId, r.report_date);
+      await api.deleteReport(lineId, r.report_date, r.part);
       setReports((prev) => (prev ? prev.filter((x) => x.id !== r.id) : prev));
       onDeleted?.();
     } catch (err) {
@@ -104,7 +107,10 @@ export function SubmissionHistory({
           <tbody>
             {reports.map((r) => (
               <tr key={r.id} className="border-b border-border last:border-0">
-                <td className="whitespace-nowrap px-2 py-1.5 font-medium">{formatDate(r.report_date)}</td>
+                <td className="whitespace-nowrap px-2 py-1.5 font-medium">
+                  {formatDate(r.report_date)}
+                  {r.part !== "AB" ? <span className="ml-1 text-xs text-primary">{partLabel(lineNumber, r.part)}</span> : null}
+                </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-muted">{formatTime(r.submitted_at)}</td>
                 <td className="px-2 py-1.5 text-muted">{r.buyer ?? "-"}</td>
                 <td className="px-2 py-1.5 text-right">{r.shift_count}</td>

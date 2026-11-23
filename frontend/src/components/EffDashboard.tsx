@@ -381,7 +381,7 @@ export function EffPanel({ metric, data }: { metric: EffMetric; data: DashboardR
                 // still stands out without being counted as Không đạt.
                 const diffClass = failed ? "text-danger font-semibold" : diff !== null && diff < 0 ? "text-warning font-semibold" : "";
                 return (
-                  <tr key={line.line_id} className="border-b border-border last:border-0">
+                  <tr key={`${line.line_id}-${line.part}`} className="border-b border-border last:border-0">
                     <td className="whitespace-nowrap px-4 py-2 font-medium">{line.line_number}</td>
                     <td className="px-4 py-2 text-muted">{line.executive_name}</td>
                     <td className="px-4 py-2 text-muted">{line.buyer ?? "-"}</td>

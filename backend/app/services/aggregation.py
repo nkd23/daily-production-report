@@ -1,7 +1,9 @@
 """Builds the per-line / per-executive / per-PU day summary that both the
 dashboard API and the Excel export are based on, so the two stay consistent.
 
-There is exactly one daily_reports row per line per date. The Tổ trưởng
+A line normally has one daily_reports row per date (part "AB"); a split
+line instead reports its halves "A" / "B" separately, and each half becomes
+its own row here (labelled e.g. "39A"). The Tổ trưởng
 enters shift_count (the factory's "tổng số Ca") directly on that row rather
 than submitting once per shift, so no summing/averaging across rows is
 needed here - every OUT-*/EFF-*/WIP value is read straight off the row.
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.deps import resolve_effective_lock
 from app.models import DailyReport, Line
 from app.schemas import DashboardResponse, ExecutiveSummary, GroupSummary, IssueItem, KpiSummary, LineDaySummary
+from app.services.line_parts import part_label, part_order
 
 
 def _avg(values: list[float]) -> float | None:
@@ -58,87 +61,110 @@ def active_lines(db: Session) -> list[Line]:
     )
 
 
+def group_reports_by_line(reports) -> dict[int, list[DailyReport]]:
+    grouped: dict[int, list[DailyReport]] = {}
+    for r in reports:
+        grouped.setdefault(r.line_id, []).append(r)
+    return grouped
+
+
 def build_line_summaries(db: Session, report_date: date) -> list[LineDaySummary]:
     reports = db.scalars(select(DailyReport).where(DailyReport.report_date == report_date)).all()
-    return summarize_lines(active_lines(db), {r.line_id: r for r in reports}, report_date)
+    return summarize_lines(active_lines(db), group_reports_by_line(reports), report_date)
+
+
+def _rows_to_show(rows: list[DailyReport]) -> list[DailyReport | None]:
+    """The submitted parts of a line that day (AB, or A and/or B). Without
+    any, the one unsubmitted row (e.g. created by an unlock) or nothing."""
+    rows = sorted(rows, key=lambda r: part_order(r.part))
+    submitted = [r for r in rows if r.is_submitted]
+    if submitted:
+        return submitted
+    return rows[:1] or [None]
 
 
 def summarize_lines(
-    lines: list[Line], reports_by_line: dict[int, DailyReport], report_date: date
+    lines: list[Line], reports_by_line: dict[int, list[DailyReport]], report_date: date
 ) -> list[LineDaySummary]:
     """The per-line day summary, from already-loaded rows - lets the weekly
-    report load a whole week in one query instead of one per day."""
+    report load a whole week in one query instead of one per day. A split
+    line gives one row per half."""
     summaries: list[LineDaySummary] = []
     for line in lines:
-        report = reports_by_line.get(line.id)
-
-        eff_sew = float(report.eff_sew) if report and report.eff_sew is not None else None
-        eff_fin = float(report.eff_fin) if report and report.eff_fin is not None else None
-        # shift_count (the factory's "tổng số Ca") is the weight for EFF%
-        # averaging across lines: SUMPRODUCT(Shift, EFF%) / SUM(Shift). A line
-        # that reported no EFF value for the day - or an explicit 0, entered
-        # because the Tổ trưởng ran no real production that day rather than a
-        # genuine 0% efficiency - is dropped from the divisor too (the
-        # original sheet's EFF-FIN subtotals divide by 11/21/53 rather than
-        # the full 13/23/55).
-        shift_weight = report.shift_count if report else 0
-        shift_display = str(report.shift_count) if report else "-"
-        eff_sew_weight = shift_weight if eff_sew else 0
-        eff_fin_weight = shift_weight if eff_fin else 0
-
-        # Only report_date's own row counts - no history lookback and no
-        # falling back to the Line's "Cấu hình Line" default (see module
-        # docstring). A line nobody touched today shows 0/blank, so it can't
-        # silently inflate a KPI/subtotal it never actually contributed to.
-        sam = float(report.sam) if report and report.sam is not None else 0.0
-        target_output = report.target_output if report and report.target_output is not None else 0
-        target_eff = float(report.target_eff) if report and report.target_eff is not None else 0.0
-
-        out_fin = report.out_fin_fin if report else None
-        is_locked = (
-            resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
-            if report
-            else resolve_effective_lock(report_date, False, False)
-        )
-
-        # target_output == 0 means the line has never had a real target
-        # configured - skip the comparison rather than showing a bogus VAR.
-        var = (out_fin - target_output) if out_fin is not None and target_output else None
-
-        summaries.append(
-            LineDaySummary(
-                line_id=line.id,
-                line_number=line.line_number,
-                executive_name=line.executive_name,
-                pu_group=line.pu_group,
-                buyer=report.buyer if report else None,
-                sam=sam,
-                target_output=target_output,
-                target_eff=target_eff,
-                shift_display=shift_display,
-                shift_weight=shift_weight,
-                eff_sew_weight=eff_sew_weight,
-                eff_fin_weight=eff_fin_weight,
-                out_sew=report.out_sew if report else None,
-                eff_sew=eff_sew,
-                out_fin_scanpack=report.out_fin_scanpack if report else None,
-                out_fin_fin=out_fin,
-                eff_fin=eff_fin,
-                var=var,
-                wip_dip=report.wip_dip if report else None,
-                wip_wash=report.wip_wash if report else None,
-                wip_pre_pi=report.wip_pre_pi if report else None,
-                wip_post_pi=report.wip_post_pi if report else None,
-                wip_reason_machine=report.wip_reason_machine if report else False,
-                wip_reason_line_spread=report.wip_reason_line_spread if report else False,
-                wip_reason_semi_finished=report.wip_reason_semi_finished if report else False,
-                wip_reason_quality=report.wip_reason_quality if report else False,
-                issue_note=report.issue_note if report else None,
-                is_submitted=report.is_submitted if report else False,
-                is_locked=is_locked,
-            )
-        )
+        for report in _rows_to_show(reports_by_line.get(line.id, [])):
+            summaries.append(_summarize(line, report, report_date))
     return summaries
+
+
+def _summarize(line: Line, report: DailyReport | None, report_date: date) -> LineDaySummary:
+    eff_sew = float(report.eff_sew) if report and report.eff_sew is not None else None
+    eff_fin = float(report.eff_fin) if report and report.eff_fin is not None else None
+    # shift_count (the factory's "tổng số Ca") is the weight for EFF%
+    # averaging across lines: SUMPRODUCT(Shift, EFF%) / SUM(Shift). A line
+    # that reported no EFF value for the day - or an explicit 0, entered
+    # because the Tổ trưởng ran no real production that day rather than a
+    # genuine 0% efficiency - is dropped from the divisor too (the
+    # original sheet's EFF-FIN subtotals divide by 11/21/53 rather than
+    # the full 13/23/55).
+    shift_weight = report.shift_count if report else 0
+    shift_display = str(report.shift_count) if report else "-"
+    eff_sew_weight = shift_weight if eff_sew else 0
+    eff_fin_weight = shift_weight if eff_fin else 0
+
+    # Only report_date's own row counts - no history lookback and no
+    # falling back to the Line's "Cấu hình Line" default (see module
+    # docstring). A line nobody touched today shows 0/blank, so it can't
+    # silently inflate a KPI/subtotal it never actually contributed to.
+    sam = float(report.sam) if report and report.sam is not None else 0.0
+    target_output = report.target_output if report and report.target_output is not None else 0
+    target_eff = float(report.target_eff) if report and report.target_eff is not None else 0.0
+
+    out_fin = report.out_fin_fin if report else None
+    is_locked = (
+        resolve_effective_lock(report.report_date, report.is_locked, report.secretary_override)
+        if report
+        else resolve_effective_lock(report_date, False, False)
+    )
+
+    # target_output == 0 means the line has never had a real target
+    # configured - skip the comparison rather than showing a bogus VAR.
+    var = (out_fin - target_output) if out_fin is not None and target_output else None
+
+    part = report.part if report else "AB"
+    return (
+        LineDaySummary(
+            line_id=line.id,
+            part=part,
+            line_number=part_label(line.line_number, part),
+            executive_name=line.executive_name,
+            pu_group=line.pu_group,
+            buyer=report.buyer if report else None,
+            sam=sam,
+            target_output=target_output,
+            target_eff=target_eff,
+            shift_display=shift_display,
+            shift_weight=shift_weight,
+            eff_sew_weight=eff_sew_weight,
+            eff_fin_weight=eff_fin_weight,
+            out_sew=report.out_sew if report else None,
+            eff_sew=eff_sew,
+            out_fin_scanpack=report.out_fin_scanpack if report else None,
+            out_fin_fin=out_fin,
+            eff_fin=eff_fin,
+            var=var,
+            wip_dip=report.wip_dip if report else None,
+            wip_wash=report.wip_wash if report else None,
+            wip_pre_pi=report.wip_pre_pi if report else None,
+            wip_post_pi=report.wip_post_pi if report else None,
+            wip_reason_machine=report.wip_reason_machine if report else False,
+            wip_reason_line_spread=report.wip_reason_line_spread if report else False,
+            wip_reason_semi_finished=report.wip_reason_semi_finished if report else False,
+            wip_reason_quality=report.wip_reason_quality if report else False,
+            issue_note=report.issue_note if report else None,
+            is_submitted=report.is_submitted if report else False,
+            is_locked=is_locked,
+        )
+    )
 
 
 def build_executive_summaries(lines: list[LineDaySummary]) -> list[ExecutiveSummary]:

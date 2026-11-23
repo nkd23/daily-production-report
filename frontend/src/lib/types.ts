@@ -1,5 +1,14 @@
 export type UserRole = "to_truong" | "thu_ky" | "sep" | "executive" | "finishing";
 export type PuGroup = "PU1" | "PU2";
+/** "AB" = the whole line; "A" / "B" = one half of a split line. */
+export type LinePart = "AB" | "A" | "B";
+
+/** "39AB" + "A" -> "39A"; the whole line keeps its own number. */
+export function partLabel(lineNumber: string, part: LinePart): string {
+  if (part === "AB") return lineNumber;
+  const base = lineNumber.toUpperCase().endsWith("AB") ? lineNumber.slice(0, -2) : lineNumber;
+  return `${base}${part}`;
+}
 
 export interface User {
   id: number;
@@ -25,6 +34,7 @@ export interface Line {
 }
 
 export interface DailyReport {
+  part: LinePart;
   id: number;
   line_id: number;
   report_date: string;
@@ -58,6 +68,8 @@ export interface EntryDefaults {
 }
 
 export interface LineWithReport {
+  part: LinePart;
+  parts_submitted: LinePart[];
   line: Line;
   report: DailyReport | null;
   is_editable: boolean;
@@ -97,6 +109,7 @@ export interface DailyReportInput {
 }
 
 export interface LineDaySummary {
+  part: LinePart;
   line_id: number;
   line_number: string;
   executive_name: string;

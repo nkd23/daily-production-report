@@ -8,6 +8,7 @@ import type {
   DashboardResponse,
   Line,
   LineTargetRow,
+  LinePart,
   LineWithReport,
   ProgressNote,
   ProgressNoteUpdate,
@@ -110,19 +111,19 @@ export const api = {
 
   myLines: (reportDate: string) =>
     request<LineWithReport[]>(`/api/reports/my-lines?report_date=${reportDate}`),
-  getLineReport: (lineId: number, reportDate: string) =>
-    request<LineWithReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}`),
-  submitReport: (lineId: number, reportDate: string, payload: DailyReportInput) =>
-    request<DailyReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}`, {
+  getLineReport: (lineId: number, reportDate: string, part?: LinePart) =>
+    request<LineWithReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}${part ? `&part=${part}` : ""}`),
+  submitReport: (lineId: number, reportDate: string, payload: DailyReportInput, part: LinePart = "AB") =>
+    request<DailyReport>(`/api/reports/lines/${lineId}?report_date=${reportDate}&part=${part}`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
   listTargets: (asOf: string) => request<LineTargetRow[]>(`/api/targets?as_of=${asOf}`),
   setTarget: (lineId: number, payload: { target_output: number; target_eff: number; effective_from: string }) =>
     request<LineTargetRow>(`/api/targets/${lineId}`, { method: "PUT", body: JSON.stringify(payload) }),
-  setLockByLine: (lineId: number, reportDate: string, isLocked: boolean) =>
+  setLockByLine: (lineId: number, reportDate: string, isLocked: boolean, part: LinePart = "AB") =>
     request<DailyReport>(
-      `/api/reports/lines/${lineId}/lock?report_date=${reportDate}`,
+      `/api/reports/lines/${lineId}/lock?report_date=${reportDate}&part=${part}`,
       { method: "PATCH", body: JSON.stringify({ is_locked: isLocked }) }
     ),
   setLockById: (reportId: number, isLocked: boolean) =>
@@ -130,10 +131,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ is_locked: isLocked }),
     }),
-  deleteReport: (lineId: number, reportDate: string) =>
-    request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}`, { method: "DELETE" }),
-  getReportHistory: (lineId: number, reportDate: string) =>
-    request<ReportHistoryEntry[]>(`/api/reports/lines/${lineId}/history?report_date=${reportDate}`),
+  deleteReport: (lineId: number, reportDate: string, part: LinePart = "AB") =>
+    request<void>(`/api/reports/lines/${lineId}?report_date=${reportDate}&part=${part}`, { method: "DELETE" }),
+  getReportHistory: (lineId: number, reportDate: string, part: LinePart = "AB") =>
+    request<ReportHistoryEntry[]>(`/api/reports/lines/${lineId}/history?report_date=${reportDate}&part=${part}`),
   getRecentReports: (lineId: number, limit = 30) =>
     request<DailyReport[]>(`/api/reports/lines/${lineId}/recent?limit=${limit}`),
 
