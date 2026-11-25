@@ -63,7 +63,11 @@ git). Sau khi đổi biến phải deploy lại.
 | `CRON_SECRET` | Mã bí mật Vercel Cron gửi kèm khi gọi `/api/cron/retention` |
 | `PROGRESS_INGEST_KEY` | Khóa máy văn phòng gửi kèm khi đẩy bảng tiến độ lên `/api/progress/ingest` (xem `progress-agent/README.md`) |
 | `ENVIRONMENT` | `production` (từ chối chạy với `SECRET_KEY` mẫu, ẩn `/docs`) |
-| `CORS_ORIGINS` | Địa chỉ web được phép gọi API, cách nhau dấu phẩy |
+| `CORS_ORIGINS` | Địa chỉ web được phép gọi API, cách nhau dấu phẩy (địa chỉ không phải localhost đầu tiên được dùng làm link trong tin nhắn bot) |
+| `ZALO_BOT_TOKEN` | Token bot Zalo (Zalo Bot Manager nhắn khi tạo bot) |
+| `ZALO_WEBHOOK_SECRET` | Chuỗi ngẫu nhiên Zalo gửi kèm mỗi lần gọi `/api/zalo/webhook` (đặt cùng lúc với `setWebhook`) |
+| `ZALO_BOT_NAME` | Tên bot trong Zalo (vd `Bot finishing`), để bỏ phần `@tên bot` khỏi tin nhắn |
+| `ZALO_GROUP_CODE` | Mã gõ trong nhóm (`@bot dangky <mã>`) để đăng ký nhóm nhận tin |
 
 Các biến khác dùng mặc định trong `backend/app/config.py`: `REPORT_LOCK_HOUR=24` (sửa được
 đến hết ngày), `APP_TIMEZONE=Asia/Ho_Chi_Minh`, `DATA_RETENTION_DAYS=60`.
@@ -75,6 +79,51 @@ Các biến khác dùng mặc định trong `backend/app/config.py`: `REPORT_LOC
 - **Dọn dữ liệu > 60 ngày**: Vercel Cron gọi `/api/cron/retention` mỗi ngày lúc 19:00 UTC
   (2–3 giờ sáng giờ VN; gói Hobby chạy trong vòng 1 tiếng quanh giờ hẹn). Cấu hình trong
   `backend/vercel.json`.
+- **Bot Zalo** (cũng trong `backend/vercel.json`): `/api/zalo/cron/progress-check` ~10:00
+  thứ 2–7, `/api/zalo/cron/draft-reminder` ~14:00 thứ 5, `/api/zalo/cron/publish-check`
+  ~16:00 thứ 5. Các tin cảnh báo 9:00 do lượt đẩy dữ liệu của máy văn phòng kích hoạt.
+
+## Bot Zalo
+
+1. Tạo bot: trong Zalo tìm OA **Zalo Bot Manager** → **Tạo bot** (tên phải bắt đầu bằng
+   "Bot"). Token được nhắn về Zalo.
+2. Đặt 4 biến `ZALO_*` ở trên cho backend, deploy lại.
+3. Đăng ký webhook (một lần, hoặc khi đổi token/secret): gọi
+   `https://bot-api.zaloplatforms.com/bot<TOKEN>/setWebhook` với
+   `{"url": "https://baocaosanluong-api.vercel.app/api/zalo/webhook", "secret_token": "<ZALO_WEBHOOK_SECRET>"}`.
+4. Mời bot vào nhóm (Zalo Bot Creator → **Mời Bot vào nhóm**, trưởng nhóm xác nhận), rồi
+   gõ trong nhóm `@<tên bot> dangky <ZALO_GROUP_CODE>`. Đăng ký nhóm khác = nhóm cũ thôi
+   nhận tin.
+
+## Làm việc trên máy khác
+
+Code nằm trên GitHub (`nkd23/daily-production-report`); bí mật thì **không** – phải tự
+chép. Máy mới cần:
+
+1. Cài **Git**, **Python 3.11+**, **Node.js 20+**. Muốn chạy thử trên máy thì thêm
+   **SQL Server** (Developer/Express) + **ODBC Driver 17**, hoặc dùng PostgreSQL.
+2. Lấy code: `git clone https://github.com/nkd23/daily-production-report.git`
+3. Backend:
+   ```bash
+   cd backend
+   python -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt -r requirements-mssql.txt
+   copy .env.example .env        # sửa DATABASE_URL cho database của máy này
+   .venv\Scripts\python -m alembic upgrade head
+   .venv\Scripts\python seed.py   # chỉ khi database trống: tạo tài khoản admin, line, Tổ trưởng
+   ```
+4. Frontend: `cd frontend`, `npm install`, tạo `.env.local` chứa
+   `NEXT_PUBLIC_API_URL=http://localhost:8000`.
+5. Deploy được từ máy này: `npx vercel login` (tài khoản Vercel của dự án), rồi
+   `npx vercel link` trong `backend/` (chọn `baocaosanluong-api`) và trong `frontend/`
+   (chọn `baocaosanluong`).
+6. Chép thư mục bí mật `%USERPROFILE%\.duy1-deploy\` từ máy cũ sang (USB/ổ mạng, **không**
+   qua git hay chat). Cần cho: chạy migration lên Supabase, đổi cấu hình bot Zalo.
+7. Mở thư mục dự án bằng Claude Code: file `CLAUDE.md` ở gốc repo được đọc tự động,
+   chứa kiến trúc, quy tắc nghiệp vụ và quy tắc làm việc. Ghi nhớ riêng của Claude trên
+   máy cũ không đi theo – điều gì quan trọng thì ghi vào `CLAUDE.md`.
+
+Máy văn phòng chạy `progress-agent` là máy riêng, không cần đổi khi đổi máy dev.
 
 ## Chép dữ liệu giữa các database
 
