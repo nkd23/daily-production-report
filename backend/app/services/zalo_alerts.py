@@ -18,6 +18,8 @@ it is counted to today, so days_left = how many working days, today
 included, are left to pack it out on time."""
 
 import logging
+import re
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
@@ -60,6 +62,42 @@ NO_OWNER = "Chưa rõ người phụ trách"
 
 
 # ---------------------------------------------------------------- helpers
+
+# Bits of a tracker's file name that aren't the person: "(1)", dates, copy
+# numbers, "daCapNhat"...  "THU_daCapNhat_2026-11-21" -> "Thu", "Hải 1" -> "Hải".
+_NAME_NOISE_RE = re.compile(r"\(\d+\)|\d{1,4}(?:[-_./]\d{1,4})*")
+_NAME_NOISE_WORDS = {"dacapnhat", "capnhat", "copy", "final", "new", "moi", "update", "updated", "ban", "sao"}
+
+
+def fold(text: str) -> str:
+    """"Sắp LATE" -> "sap late" (no accents, lower case, single spaces)."""
+    text = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
+    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
+    return " ".join(text.lower().split())
+
+
+def person_name(file_name_or_owner: str) -> str:
+    """The person a tracker belongs to, as the bot calls them."""
+    owner = owner_from_file(file_name_or_owner) if "." in file_name_or_owner else file_name_or_owner
+    text = _NAME_NOISE_RE.sub(" ", owner)
+    text = re.sub(r"[_()\[\]]", " ", text)
+    words = []
+    skip = 0
+    tokens = text.split()
+    for i, word in enumerate(tokens):
+        if skip:
+            skip -= 1
+            continue
+        folded = fold(word)
+        # "đã cập nhật" written out as three words
+        if folded == "da" and [fold(w) for w in tokens[i + 1 : i + 3]] == ["cap", "nhat"]:
+            skip = 2
+            continue
+        if folded in _NAME_NOISE_WORDS:
+            continue
+        words.append(word)
+    name = " ".join(words).strip(" -_.()") or owner
+    return name.title() if name.isupper() else name
 
 def state_get(db: Session, key: str) -> str | None:
     row = db.get(ZaloState, key)
@@ -182,7 +220,7 @@ def open_close_orders(db: Session, today: date, allowed: set[str] | None = None)
                 "colors_open": len(rows),
                 "pack_cut": sum(r.pack_cut or 0 for r in rows),
                 # Whose tracker the order is in - the person the bot calls.
-                "owner": owner_from_file(rows[0].source_file),
+                "owner": person_name(rows[0].source_file),
             }
         )
     out.sort(key=lambda o: (o["days_left"], o["line_number"], o["jo"]))
@@ -290,9 +328,9 @@ def progress_problems(db: Session, now: datetime) -> list[str]:
             if src.kind == "plan":
                 problems.append(f"Không đọc được file PRODUCTION PLAN: {src.last_error[:150]}")
             else:
-                problems.append(f"{src.owner} ơi, bot không mở được bảng tiến độ của bạn ({src.last_error[:150]}). Bạn kiểm tra lại file nhé.")
+                problems.append(f"{person_name(src.owner)} ơi, bot không mở được bảng tiến độ của bạn ({src.last_error[:150]}). Bạn kiểm tra lại file nhé.")
         elif src.kind == "tracker" and src.file_modified_at and src.file_modified_at < now - timedelta(days=STALE_TRACKER_DAYS):
-            problems.append(f"{src.owner} ơi, bảng tiến độ của bạn chưa được lưu lại từ {dm(src.file_modified_at.date())}.")
+            problems.append(f"{person_name(src.owner)} ơi, bảng tiến độ của bạn chưa được lưu lại từ {dm(src.file_modified_at.date())}.")
     with_orders = {normalize_line(n) for n in db.scalars(select(ProgressOrder.line_number).distinct()).all()}
     missing = sorted(
         short_line(normalize_line(ln.line_number))
@@ -349,7 +387,7 @@ def after_close_order_ingest(db: Session, now: datetime, week_start: date, publi
         lines = []
         for e in errors[:10]:
             owner, _, msg = e.partition(": ")
-            lines.append(f"• {owner} ơi, bot không mở được bảng tiến độ của bạn ({msg[:150]})" if msg else f"• {e[:150]}")
+            lines.append(f"• {person_name(owner)} ơi, bot không mở được bảng tiến độ của bạn ({msg[:150]})" if msg else f"• {e[:150]}")
         when = "bản công bố 15:00" if publish else "bản nháp 9:00"
         post(db, f"⚠️ Close order ({when}) thiếu dữ liệu {len(errors)} file:\n" + "\n".join(lines))
 

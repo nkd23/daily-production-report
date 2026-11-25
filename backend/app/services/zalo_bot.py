@@ -16,7 +16,6 @@ Commands (accents and case don't matter):
 
 import re
 import secrets
-import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
@@ -26,13 +25,14 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import CloseOrderItem, CloseOrderWeek, ProgressOrder
 from app.services.close_order import _line_map, holiday_set, item_out, week_bounds
-from app.services.progress import owner_from_file
 from app.services.zalo_alerts import (
     GROUP_KEY,
     close_order_link,
+    fold,
     dm,
     group_chat_id,
     open_close_orders,
+    person_name,
     risk_text,
     short_line,
     state_get,
@@ -41,13 +41,6 @@ from app.services.zalo_alerts import (
 
 MAX_REGISTER_FAILURES = 5
 _JO_RE = re.compile(r"^[A-Z0-9]*\d[A-Z0-9]*$")
-
-
-def fold(text: str) -> str:
-    """"Sắp LATE" -> "sap late" (no accents, lower case, single spaces)."""
-    text = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
-    text = "".join(c for c in text if unicodedata.category(c) != "Mn")
-    return " ".join(text.lower().split())
 
 
 def strip_mention(text: str) -> str:
@@ -183,7 +176,7 @@ def line_answer(db: Session, number: int, today) -> str:
     line_number = f"{number:02d}AB"
     orders = [o for o in open_close_orders(db, today) if o["line_number"] == line_number]
     rows = db.scalars(select(ProgressOrder).where(ProgressOrder.line_number == line_number)).all()
-    owners = sorted({owner_from_file(r.source_file) for r in rows})
+    owners = sorted({person_name(r.source_file) for r in rows})
     sewing = len({r.jo.strip().upper() for r in rows if not r.end_sew})
     head = f"🧵 Line {number:02d} – {dm(today)}"
     if owners:
@@ -242,7 +235,7 @@ def jo_answer(db: Session, term: str, today) -> str:
         buyer = next((x.buyer for x in [*its, *rows] if x.buyer), None)
         head = f"📦 {jo} – L{short_line(line_number)}" + (f" – {buyer}" if buyer else "")
         if rows:
-            head += f"\nPhụ trách: {', '.join(sorted({owner_from_file(r.source_file) for r in rows}))}"
+            head += f"\nPhụ trách: {', '.join(sorted({person_name(r.source_file) for r in rows}))}"
         block = [head]
         for it in its[-2:]:
             out = item_out(it, lines, today, holidays, reveal_edits=False)
