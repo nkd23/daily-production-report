@@ -11,6 +11,7 @@ from app.deps import local_now, local_today, require_dashboard_viewer, require_f
 from app.models import ProgressNote, User, UserRole
 from app.schemas import ProgressIngest, ProgressNoteOut, ProgressNoteUpdate, ProgressNumberUpdate, ProgressResponse
 from app.services.progress import build_view, can_edit_order, ingest, set_override
+from app.services.zalo_alerts import after_progress_ingest, run_safely
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 settings = get_settings()
@@ -31,8 +32,10 @@ def ingest_progress(
     # that every order finished overnight - keep yesterday's data instead.
     if not payload.sources:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không có file bảng tiến độ nào")
-    result = ingest(db, payload, local_now().replace(tzinfo=None))
+    now = local_now().replace(tzinfo=None)
+    result = ingest(db, payload, now)
     db.commit()
+    run_safely(after_progress_ingest, db, now)
     return result
 
 

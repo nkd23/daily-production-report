@@ -30,12 +30,30 @@ class Settings(BaseSettings):
     # Sent by the "bảng tiến độ" agent on the office PC as the X-Progress-Key
     # header - see /api/progress/ingest. Empty disables ingestion.
     progress_ingest_key: str = ""
+    # Zalo bot (bot.zapps.me): its API token, and the secret Zalo sends back
+    # as X-Bot-Api-Secret-Token on every webhook call. No token = messages
+    # are only logged (local development).
+    zalo_bot_token: str = ""
+    zalo_webhook_secret: str = ""
+    # Typed in the Zalo group ("dangky <code>") to make it the bot's group.
+    zalo_group_code: str = ""
+    # The bot's name in Zalo, to strip "@<name>" from messages in the group.
+    zalo_bot_name: str = ""
     # Set automatically by Vercel at runtime.
     vercel: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def app_url(self) -> str:
+        """The web app, for links in bot messages: the first CORS origin
+        that isn't localhost."""
+        origins = self.cors_origin_list
+        public = [o for o in origins if "localhost" not in o and "127.0.0.1" not in o]
+        chosen = (public or origins or [""])[0]
+        return chosen.rstrip("/")
 
     @property
     def is_production(self) -> bool:

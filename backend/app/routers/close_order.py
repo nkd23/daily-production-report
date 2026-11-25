@@ -1,3 +1,4 @@
+import json
 import secrets
 from datetime import date
 
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.deps import local_now, local_today, require_dashboard_viewer, require_finishing_editor, require_sep_only
-from app.models import CloseOrderItem, Holiday, User, UserRole
+from app.models import CloseOrderItem, CloseOrderWeek, Holiday, User, UserRole
 from app.schemas import (
     CloseOrderImport,
     CloseOrderIngest,
@@ -21,6 +22,7 @@ from app.schemas import (
     HolidayOut,
 )
 from app.services.progress import parse_iso
+from app.services.zalo_alerts import after_close_order_ingest, run_safely
 from app.services.close_order import (
     DEPARTMENTS,
     _line_map,
@@ -54,8 +56,13 @@ def ingest_close_order(
     _check_key(x_progress_key)
     if not payload.sources:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không có file bảng tiến độ nào")
-    result = ingest(db, payload, local_now().replace(tzinfo=None))
+    now = local_now().replace(tzinfo=None)
+    result = ingest(db, payload, now)
     db.commit()
+    week_start = date.fromisoformat(result["week_start"])
+    week = db.scalar(select(CloseOrderWeek).where(CloseOrderWeek.week_start == week_start))
+    errors = json.loads(week.source_errors) if week is not None and week.source_errors else []
+    run_safely(after_close_order_ingest, db, now, week_start, payload.publish, errors)
     return result
 
 

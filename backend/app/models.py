@@ -424,3 +424,15 @@ class Holiday(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     day: Mapped["Date"] = mapped_column(Date, unique=True, nullable=False)
     name: Mapped[str | None] = mapped_column(Unicode(100), nullable=True)
+
+
+class ZaloState(Base):
+    """Small key/value notes for the Zalo bot: the registered group chat,
+    what was last sent (so a re-run doesn't send the same alert twice),
+    failed registration attempts."""
+
+    __tablename__ = "zalo_state"
+
+    key: Mapped[str] = mapped_column(Unicode(100), primary_key=True)
+    value: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
+    updated_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=False)
