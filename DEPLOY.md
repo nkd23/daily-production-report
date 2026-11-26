@@ -62,6 +62,7 @@ git). Sau khi đổi biến phải deploy lại.
 | `SECRET_KEY` | Khoá ký phiên đăng nhập, chuỗi ngẫu nhiên ≥ 32 ký tự. Đổi khoá = mọi người phải đăng nhập lại |
 | `CRON_SECRET` | Mã bí mật Vercel Cron gửi kèm khi gọi `/api/cron/retention` |
 | `PROGRESS_INGEST_KEY` | Khóa máy văn phòng gửi kèm khi đẩy bảng tiến độ lên `/api/progress/ingest` (xem `progress-agent/README.md`) |
+| `LABEL_INGEST_KEY` | Khóa công cụ "Sổ theo dõi đặt tem" (máy Duy, biến `DATTEM_WEB_KEY`) gửi kèm khi đẩy dữ liệu đặt tem lên `/api/labels/ingest` |
 | `ENVIRONMENT` | `production` (từ chối chạy với `SECRET_KEY` mẫu, ẩn `/docs`) |
 | `CORS_ORIGINS` | Địa chỉ web được phép gọi API, cách nhau dấu phẩy (địa chỉ không phải localhost đầu tiên được dùng làm link trong tin nhắn bot) |
 | `ZALO_BOT_TOKEN` | Token bot Zalo (Zalo Bot Manager nhắn khi tạo bot) |

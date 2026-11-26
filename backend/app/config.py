@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Sent by the "bảng tiến độ" agent on the office PC as the X-Progress-Key
     # header - see /api/progress/ingest. Empty disables ingestion.
     progress_ingest_key: str = ""
+    # Sent by Duy's label-ordering tool ("Sổ theo dõi đặt tem") as the
+    # X-Label-Key header - see /api/labels/ingest. Empty disables it.
+    label_ingest_key: str = ""
     # Zalo bot (bot.zapps.me): its API token, and the secret Zalo sends back
     # as X-Bot-Api-Secret-Token on every webhook call. No token = messages
     # are only logged (local development).

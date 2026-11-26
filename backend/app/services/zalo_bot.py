@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import CloseOrderItem, CloseOrderWeek, ProgressOrder
 from app.services.close_order import _line_map, holiday_set, item_out, week_bounds
+from app.services.labels import answer as label_answer
 from app.services.zalo_alerts import (
     GROUP_KEY,
     close_order_link,
@@ -86,6 +87,7 @@ def help_text() -> str:
             "• sắp late: đơn sắp late và đã late, theo người phụ trách",
             "• late: các đơn late tuần Close order gần nhất",
             "• tuần: tóm tắt tuần Close order gần nhất",
+            "• tem: đơn cần đặt tem hôm nay · tem <JO>: đơn đó đã đặt tem chưa",
             "Bot tự nhắn: cảnh báo sắp late sau 9:00 mỗi ngày, bản nháp Close order 9:00 thứ 5.",
         ]
     )
@@ -298,6 +300,9 @@ def handle_text(db: Session, chat_id: str, chat_type: str, text: str, now: datet
         return late_list(db, today)
     if folded in ("tuan", "tom tat", "close", "close order", "tong hop", "bao cao"):
         return week_summary(db, today)
+    m = re.fullmatch(r"(?:dat )?tem(?:\s+(\S+))?", folded)
+    if m:
+        return label_answer(db, raw.split()[-1] if m.group(1) else None, today)
     m = re.fullmatch(r"(?:line|chuyen|l)\s*0*(\d{1,3})(?:\s*ab)?", folded)
     if m:
         return line_answer(db, int(m.group(1)), today)

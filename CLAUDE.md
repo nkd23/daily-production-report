@@ -81,7 +81,14 @@ Pack-cut ≠ 0, hoặc đã có Cut mà chưa có Sew. Có "Đóng đơn" tay, r
 `@bot dangky <ZALO_GROUP_CODE>`. Tự nhắn: cảnh báo đơn sắp late sau lượt Tiến độ 9:00
 (gọi tên chủ file bảng tiến độ: "Hương ơi, ..."), bản nháp Close order thứ 5, lỗi dữ
 liệu/máy văn phòng không chạy. Trả lời khi được tag: mã JO, `line 28`, `sắp late`,
-`late`, `tuần`, `hd`. Nhóm thấy dữ liệu như Manager. Không có lệnh sửa qua Zalo.
+`late`, `tuần`, `tem`, `tem <JO>`, `hd`. Nhóm thấy dữ liệu như Manager. Không có lệnh sửa qua Zalo.
+
+**Đặt tem** (`services/labels.py`, `routers/labels.py`): công cụ "Sổ theo dõi đặt tem" trên
+máy Duy (ngoài repo, `DuAn_CongCu_Duy\DatTemCT`) đẩy `POST /api/labels/ingest` (header
+`X-Label-Key` = `LABEL_INGEST_KEY`) mỗi sáng / khi có plan mới / sau khi tự đặt SRN in tem.
+Dữ liệu mới nhất lưu JSON trong `zalo_state` (`labels:*`), không có bảng riêng, không cần
+migration. Đơn vị = JO + màu + line; hạn đặt = Start sew − 5. Bot nhắn 1 lần/ngày làm việc
+danh sách cần đặt theo người, và báo mỗi lần công cụ tự đặt SRN.
 
 ## Lịch tự động
 
