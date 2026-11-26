@@ -89,6 +89,8 @@ máy Duy (ngoài repo, `DuAn_CongCu_Duy\DatTemCT`) đẩy `POST /api/labels/inge
 Dữ liệu mới nhất lưu JSON trong `zalo_state` (`labels:*`), không có bảng riêng, không cần
 migration. Đơn vị = JO + màu + line; hạn đặt = Start sew − 5. Bot nhắn 1 lần/ngày làm việc
 danh sách cần đặt theo người, và báo mỗi lần công cụ tự đặt SRN.
+`POST /api/labels/cartons` (cùng khoá X-Label-Key): n8n đẩy tem thùng CT (SRN CTN) từ pre-PKL mới trong
+thư mục `PrePKL CT - NEW` - `can_dat` / `da_dat` / `can_xem` -> bot đăng 1 tin; lưu `labels:cartons`.
 
 ## Lịch tự động
 

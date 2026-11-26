@@ -170,3 +170,55 @@ def answer(db: Session, term: str | None, today: date) -> str:
     if len(found) > 20:
         out.append(f"… và {len(found) - 20} dòng nữa")
     return "\n".join(out)
+
+
+# ------------------------------------------------------- carton labels
+
+KEY_CARTONS = "labels:cartons"
+CARTON_LIMIT = 25
+
+
+def _carton_label(c: dict) -> str:
+    line = f"L{short_line(str(c.get('line')))} " if c.get("line") else ""
+    tu, den = c.get("tu_thung"), c.get("den_thung")
+    thung = f"thùng {tu}" if tu == den else f"thùng {tu}–{den}"
+    return f"{line}{c.get('lpo', '?')} {c.get('jo', '?')} {c.get('color', '')} {thung}".replace("  ", " ")
+
+
+def carton_text(can_dat: list[dict], da_dat: list[dict], can_xem: list[dict]) -> str | None:
+    """Tem thùng CT (SRN CTN) from a new pre-packing list in 'PrePKL CT - NEW'."""
+    if not (can_dat or da_dat or can_xem):
+        return None
+    blocks = []
+    if da_dat:
+        lines = [f"✅ Đã tự đặt {len(da_dat)} SRN tem thùng:"]
+        lines += [f"• {_carton_label(c)} → {c.get('request_code', '?')}" for c in da_dat[:CARTON_LIMIT]]
+        blocks.append("\n".join(lines))
+    if can_dat:
+        ngay = _day(can_dat[0].get("ngay_can"))
+        lines = [f"📦 Pre-PKL CT mới - {len(can_dat)} SRN tem thùng cần đặt (SRN CTN, tem/thùng 1"
+                 + (f", ngày cần {dm(ngay)}" if ngay else "") + "):"]
+        lines += [f"• {_carton_label(c)}" for c in can_dat[:CARTON_LIMIT]]
+        if len(can_dat) > CARTON_LIMIT:
+            lines.append(f"… và {len(can_dat) - CARTON_LIMIT} SRN nữa")
+        blocks.append("\n".join(lines))
+    if can_xem:
+        lines = [f"⚠️ Pre-PKL cần xem lại ({len(can_xem)}) - chưa đặt tem thùng:"]
+        for c in can_xem[:CARTON_LIMIT]:
+            lines.append(f"• {c.get('lpo', '?')} {c.get('jo', '?')} {c.get('color', '')}: {c.get('ly_do', '')}".replace("  ", " "))
+        if len(can_xem) > CARTON_LIMIT:
+            lines.append(f"… và {len(can_xem) - CARTON_LIMIT} mục nữa")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def ingest_cartons(db: Session, payload, now: datetime) -> dict:
+    state_set(db, KEY_CARTONS, json.dumps({"at": now.isoformat(timespec="minutes"), "can_dat": payload.can_dat,
+                                           "da_dat": payload.da_dat, "can_xem": payload.can_xem}, ensure_ascii=False), now)
+    return {"can_dat": len(payload.can_dat), "da_dat": len(payload.da_dat), "can_xem": len(payload.can_xem)}
+
+
+def after_carton_ingest(db: Session, now: datetime, payload) -> None:
+    text = carton_text(payload.can_dat, payload.da_dat, payload.can_xem)
+    if text:
+        post(db, text)
