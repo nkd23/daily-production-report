@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { RequireRole } from "@/components/RequireRole";
 import { PageShell } from "@/components/PageShell";
@@ -1154,6 +1155,11 @@ function ProgressContent() {
                       {BPO_LABEL[level]}
                     </span>
                     <span className="block text-xs text-muted">{hint}</span>
+                    {active ? (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-primary-soft px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                        <X size={11} /> Đang lọc – bấm để bỏ
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-2xl font-bold tabular-nums">{bpoCounts[level]}</span>
                 </button>
@@ -1230,6 +1236,23 @@ function ProgressContent() {
           <input type="checkbox" checked={includeClosed} onChange={(e) => setIncludeClosed(e.target.checked)} />
           Hiện đơn đã đóng{data?.closed_count ? ` (${data.closed_count})` : ""}
         </label>
+        {search || executive || line || bpoFilter || lateFilter || onlyShort ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setExecutive("");
+              setLine("");
+              setBpoFilter("");
+              setLateFilter("");
+              setOnlyShort(false);
+            }}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm font-medium text-primary hover:bg-primary-soft"
+            title="Xoá mọi bộ lọc, hiện lại tất cả đơn"
+          >
+            <X size={14} /> Bỏ lọc
+          </button>
+        ) : null}
         <span className="ml-auto flex items-center gap-3 text-sm text-muted">
           {data ? `${filtered.length} đơn` : ""}
           <span className="inline-flex overflow-hidden rounded-lg border border-border text-xs" role="group" aria-label="Kiểu xem">
