@@ -17,6 +17,7 @@ COLUMNS = [
     ("Byr", "buyer", 12),
     ("JO", "jo", 16),
     ("BPO date", "bpo_date", 11),
+    ("Cảnh báo BPO", "bpo_warning", 30),
     ("Shipment plan", "shipment_plan", 12),
     ("Order carton", "order_carton", 11),
     ("Start sew", "start_sew", 11),
@@ -46,6 +47,14 @@ LATE_LIMIT = 4
 LATE_RISK_FROM = 3
 LATE_FILL = PatternFill("solid", fgColor="FEE2E2")
 RISK_FILL = PatternFill("solid", fgColor="FEF3C7")
+# Rows are tinted by the BPO warning (app.services.bpo), lightly; the End sew
+# -> End pack late only colours its own cell.
+BPO_FILLS = {
+    "overdue": PatternFill("solid", fgColor="FDECEC"),
+    "late": PatternFill("solid", fgColor="FEF6F6"),
+    "soon": PatternFill("solid", fgColor="FFF8E6"),
+}
+BPO_FONTS = {"overdue": Font(bold=True, color="B91C1C"), "late": Font(color="DC2626"), "soon": Font(color="B45309")}
 THIN = Side(style="thin", color="BFBFBF")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
@@ -96,10 +105,15 @@ def generate_progress_excel(orders: list[dict], today: date) -> BytesIO:
                 cell.border = BORDER
                 if field == "pack_cut" and isinstance(value, int) and value < 0:
                     cell.font = NEGATIVE_FONT
+                level = o.get("bpo_level")
+                if level in BPO_FILLS:
+                    cell.fill = BPO_FILLS[level]
+                    if field == "bpo_warning":
+                        cell.font = BPO_FONTS[level]
                 late = o.get("late")
-                if isinstance(late, int) and late > LATE_LIMIT:
+                if field == "late" and isinstance(late, int) and late > LATE_LIMIT:
                     cell.fill = LATE_FILL
-                elif isinstance(late, int) and late >= LATE_RISK_FROM:
+                elif field == "late" and isinstance(late, int) and late >= LATE_RISK_FROM:
                     cell.fill = RISK_FILL
         ws.freeze_panes = "D2"
         ws.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{max(ws.max_row, 1)}"

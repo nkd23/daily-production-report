@@ -493,6 +493,10 @@ class ProgressOrderOut(BaseModel):
     # The computed value, and whether Finishing replaced it.
     auto_late: int | None
     late_manual: bool
+    # BPO-date warning: "overdue" / "late" / "soon" or None (app.services.bpo).
+    bpo_level: str | None = None
+    bpo_deadline: date | None = None
+    bpo_warning: str | None = None
     ex_remark: str | None
     fin_remark: str | None
     # Closed by hand ("Đóng đơn"); only returned when closed orders are asked for.

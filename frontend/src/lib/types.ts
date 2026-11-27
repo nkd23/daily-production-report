@@ -311,6 +311,10 @@ export interface ProgressEdit {
   set_at: string;
 }
 
+/** overdue = BPO passed, late = End sew / End pack deadline passed,
+ *  soon = 3 working days or less to that deadline. */
+export type BpoLevel = "overdue" | "late" | "soon";
+
 export interface ProgressOrder {
   order_key: string;
   line_number: string;
@@ -341,6 +345,11 @@ export interface ProgressOrder {
   /** The computed value, and whether Finishing replaced it. */
   auto_late: number | null;
   late_manual: boolean;
+  /** On track for the BPO date? null = yes (or no BPO date). */
+  bpo_level: BpoLevel | null;
+  bpo_deadline: string | null;
+  /** e.g. "Quá BPO 3 ngày – chưa End sew", "Hạn End pack 28/11 – còn 2 ngày". */
+  bpo_warning: string | null;
   ex_remark: string | null;
   fin_remark: string | null;
   is_closed: boolean;

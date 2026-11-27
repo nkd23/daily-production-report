@@ -312,6 +312,11 @@ def visible_line_numbers(db: Session, user: User) -> set[str] | None:
 
 
 def build_view(db: Session, user: User, today: date, include_closed: bool = False) -> dict:
+    # Imported here: close_order and bpo import this module.
+    from app.services.bpo import bpo_status
+    from app.services.close_order import holiday_set
+
+    holidays = holiday_set(db)
     lines = _line_map(db)
     allowed = visible_line_numbers(db, user)
     notes = {n.order_key: n for n in db.scalars(select(ProgressNote)).all()}
@@ -340,6 +345,7 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
         late_override = note.late_override if note else None
         late = late_override if late_override is not None else auto_late
         qty, pack_cut, edited = effective_quantities(o, overrides.get(o.order_key, {}))
+        bpo = bpo_status(o.bpo_date, o.end_sew, o.product_category, today, holidays)
         orders.append(
             {
                 "order_key": o.order_key,
@@ -366,6 +372,10 @@ def build_view(db: Session, user: User, today: date, include_closed: bool = Fals
                 # Only Finishing learns that (and from what) late was changed.
                 "auto_late": auto_late if user.role == UserRole.finishing else late,
                 "late_manual": late_override is not None and user.role == UserRole.finishing,
+                # Is the order on track for its BPO date (app.services.bpo)?
+                "bpo_level": bpo["level"] if bpo else None,
+                "bpo_deadline": bpo["deadline"] if bpo else None,
+                "bpo_warning": bpo["text"] if bpo else None,
                 "ex_remark": note.ex_remark if note else None,
                 "fin_remark": note.fin_remark if note else None,
                 "is_closed": is_closed,
