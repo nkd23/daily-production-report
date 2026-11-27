@@ -126,6 +126,9 @@ Vercel Hobby chạy cron trong vòng 1 tiếng quanh giờ hẹn (`backend/verce
   xoá sau khi thử.
 - Chỉ commit / push / deploy khi người dùng bảo (thường là "deploy đi"). Thứ tự:
   migration lên Supabase (nếu có) → deploy backend → deploy frontend → commit + push.
+- **Dự án được sửa từ nhiều máy.** Trước khi deploy luôn `git fetch` + `git pull --rebase`
+  (commit phần của mình trước): `vercel deploy` đẩy đúng thư mục trên máy đang chạy, nên
+  deploy từ code cũ sẽ xoá mất chức năng máy kia đã đưa lên.
 - Công thức nghiệp vụ chưa rõ thì hỏi, không đoán.
 - Windows: file có thể là CRLF; viết script sửa file bằng Python và chuẩn hoá xuống dòng.
 - Lỗi lint `react-hooks/set-state-in-effect` ở vài file cũ là đã biết, không cần sửa.
