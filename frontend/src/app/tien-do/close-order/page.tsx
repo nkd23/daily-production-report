@@ -446,9 +446,23 @@ function DateInput({
   );
 }
 
-/** Pack-Cut cell for Finishing: any whole number (negative = short);
- * blank goes back to the trackers' Pack-Cut. */
-function PackCutInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: number | null) => Promise<void> }) {
+/** Pack / Pack-Cut cell for Finishing; blank goes back to the trackers'
+ * number. The other one follows on the server (Pack-Cut = Pack - Cut). */
+function QtyInput({
+  value,
+  manual,
+  trackerValue,
+  label,
+  allowNegative,
+  onSave,
+}: {
+  value: number | null;
+  manual: boolean;
+  trackerValue: number | null;
+  label: string;
+  allowNegative: boolean;
+  onSave: (v: number | null) => Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const cancelled = useRef(false);
@@ -460,12 +474,16 @@ function PackCutInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: numb
       return;
     }
     const text = draft.replace(/[.,\s]/g, "");
-    if (text !== "" && !/^-?\d{1,8}$/.test(text)) {
-      alert("Nhập số nguyên (âm nếu thiếu pack), hoặc để trống để lấy số của bảng tiến độ.");
+    if (text !== "" && !(allowNegative ? /^-?\d{1,8}$/ : /^\d{1,8}$/).test(text)) {
+      alert(
+        allowNegative
+          ? "Nhập số nguyên (âm nếu thiếu pack), hoặc để trống để lấy số của bảng tiến độ."
+          : "Nhập số nguyên không âm, hoặc để trống để lấy số của bảng tiến độ."
+      );
       return;
     }
     const next = text === "" ? null : Number(text);
-    const current = item.pack_cut_manual ? item.pack_cut : null;
+    const current = manual ? value : null;
     if (next !== current) {
       try {
         await onSave(next);
@@ -500,19 +518,19 @@ function PackCutInput({ item, onSave }: { item: CloseOrderItem; onSave: (v: numb
     <button
       type="button"
       onClick={() => {
-        setDraft(item.pack_cut_manual && item.pack_cut != null ? String(item.pack_cut) : "");
+        setDraft(manual && value != null ? String(value) : "");
         setEditing(true);
       }}
       title={
-        item.pack_cut_manual
-          ? `Sửa tay. Bảng tiến độ ghi: ${item.tracker_pack_cut ?? "(trống)"}. Bấm, xoá trống để trả về.`
-          : "Bấm để sửa Pack-Cut"
+        manual
+          ? `Sửa tay. Bảng tiến độ ghi: ${trackerValue ?? "(trống)"}. Bấm, xoá trống để trả về.`
+          : `Bấm để sửa ${label}`
       }
       className={`min-w-[2rem] rounded px-1 text-right tabular-nums hover:bg-primary-soft/60 ${
-        item.pack_cut != null && item.pack_cut < 0 ? "font-semibold text-danger" : ""
+        value != null && value < 0 ? "font-semibold text-danger" : ""
       }`}
     >
-      {item.pack_cut == null ? "-" : num(item.pack_cut)}
+      {value == null ? "-" : num(value)}
     </button>
   );
 }
@@ -1344,10 +1362,30 @@ function CloseOrderContent() {
                         <td className={TD}>{ddmm(i.exfty_date)}</td>
                         <td className={`${TD} text-right tabular-nums`}>{num(i.cut_qty)}</td>
                         <td className={`${TD} text-right tabular-nums`}>{num(i.sew_qty)}</td>
-                        <td className={`${TD} text-right tabular-nums`}>{num(i.pack_qty)}</td>
+                        <td className={`${TD} text-right tabular-nums`}>
+                          {canOverride && !i.is_removed ? (
+                            <QtyInput
+                              value={i.pack_qty}
+                              manual={i.pack_qty_manual}
+                              trackerValue={i.tracker_pack_qty}
+                              label="Pack (Pack-Cut tự tính lại)"
+                              allowNegative={false}
+                              onSave={(v) => update(i, { pack_qty: v })}
+                            />
+                          ) : (
+                            num(i.pack_qty)
+                          )}
+                        </td>
                         <td className={`${TD} text-right tabular-nums ${i.pack_cut && i.pack_cut < 0 ? "font-semibold text-danger" : ""}`}>
                           {canOverride && !i.is_removed ? (
-                            <PackCutInput item={i} onSave={(v) => update(i, { pack_cut: v })} />
+                            <QtyInput
+                              value={i.pack_cut}
+                              manual={i.pack_cut_manual}
+                              trackerValue={i.tracker_pack_cut}
+                              label="Pack-Cut (Pack tự tính lại)"
+                              allowNegative
+                              onSave={(v) => update(i, { pack_cut: v })}
+                            />
                           ) : (
                             num(i.pack_cut)
                           )}

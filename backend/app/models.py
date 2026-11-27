@@ -388,6 +388,8 @@ class CloseOrderItem(Base):
     end_sew_override: Mapped["Date | None"] = mapped_column(Date, nullable=True)
     end_pack_override: Mapped["Date | None"] = mapped_column(Date, nullable=True)
     pack_cut_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Finishing's Pack qty; Pack-Cut then follows it (Pack - Cut).
+    pack_qty_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # "Tồn tuần trước": fully sewn before this week (up to 8 weeks back) but
     # still not packed out on the report day, so listed again this week.
     is_carry: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

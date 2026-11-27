@@ -208,6 +208,8 @@ export type CloseOrderPatch = {
   end_pack?: string | null;
   /** May be negative; null goes back to the trackers' Pack-Cut. */
   pack_cut?: number | null;
+  /** Pack-Cut then follows (Pack - Cut); null goes back to the trackers' Pack. */
+  pack_qty?: number | null;
   is_late?: boolean | null;
   removed?: boolean;
 };

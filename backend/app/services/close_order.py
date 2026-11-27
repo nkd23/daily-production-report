@@ -38,7 +38,15 @@ HISTORY_WEEKS = 6
 # "Tồn tuần trước" looks this far back before the reported week.
 CARRY_LOOKBACK_DAYS = 56
 # Finishing's notes on an order that carry over when it is listed again.
-CARRIED_NOTE_FIELDS = ("remark", "department", "wf", "end_sew_override", "end_pack_override", "pack_cut_override")
+CARRIED_NOTE_FIELDS = (
+    "remark",
+    "department",
+    "wf",
+    "end_sew_override",
+    "end_pack_override",
+    "pack_cut_override",
+    "pack_qty_override",
+)
 # ...and, when an order moves to its End Sew week, whether Finishing removed it.
 MOVED_NOTE_FIELDS = (*CARRIED_NOTE_FIELDS, "is_removed", "removed_by", "removed_at")
 WF_CATEGORY = "WWF_T"
@@ -339,12 +347,18 @@ def trim_history(db: Session) -> None:
 
 def _refresh(db: Session, orders: dict) -> None:
     """Quantities and End pack of orders the web listed follow the trackers
-    (manual fields are never touched). Weeks imported from the old Excel
-    report keep their own numbers, and a known End pack date is never
-    cleared by a tracker that has none."""
-    for item in db.scalars(select(CloseOrderItem).where(CloseOrderItem.source == "web")).all():
+    (manual fields are never touched), and a known End pack date is never
+    cleared by a tracker that has none. Weeks imported from the old Excel
+    report keep their own numbers - only an End pack DATE the old report
+    didn't have yet is filled in, or their Late duration would keep counting
+    to today forever (a bare "Done" is left for Finishing to date)."""
+    for item in db.scalars(select(CloseOrderItem)).all():
         info = orders.get((item.line_number, item.jo.upper()))
         if info is None:
+            continue
+        if item.source != "web":
+            if not item.end_pack and parse_iso(info["end_pack"]):
+                item.end_pack = info["end_pack"]
             continue
         for field in REFRESHED_FIELDS:
             if field == "end_pack" and info[field] is None and item.end_pack:
@@ -436,10 +450,11 @@ HAND_EDIT_FIELDS = {
     "tracker_pack_cut": "pack_cut",
     "tracker_end_sew": "end_sew",
     "tracker_end_pack": "end_pack",
+    "tracker_pack_qty": "pack_qty",
     "auto_late_duration": "late_duration",
     "auto_is_late": "is_late",
 }
-HAND_EDIT_FLAGS = ("pack_cut_manual", "end_sew_manual", "end_pack_manual", "duration_manual", "late_manual", "is_carry")
+HAND_EDIT_FLAGS = ("pack_qty_manual", "pack_cut_manual", "end_sew_manual", "end_pack_manual", "duration_manual", "late_manual", "is_carry")
 
 
 def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date], reveal_edits: bool = True) -> dict:
@@ -452,8 +467,20 @@ def item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays
     return out
 
 
+def effective_pack(item: CloseOrderItem) -> tuple[int | None, int | None]:
+    """(Pack, Pack-Cut) after Finishing's corrections: a corrected Pack makes
+    Pack-Cut = Pack - Cut; a Pack-Cut typed while Cut is unknown stands alone."""
+    pack = item.pack_qty_override if item.pack_qty_override is not None else item.pack_qty
+    if item.pack_qty_override is not None and item.cut_qty is not None:
+        return pack, pack - item.cut_qty
+    if item.pack_cut_override is not None:
+        return pack, item.pack_cut_override
+    return pack, item.pack_cut
+
+
 def _item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holidays: set[date]) -> dict:
     line = lines.get(item.line_number)
+    pack, pack_cut = effective_pack(item)
     wf = _effective_wf(item)
     duration, late, auto_duration, auto_late = effective_late(item, today, holidays)
     return {
@@ -467,10 +494,12 @@ def _item_out(item: CloseOrderItem, lines: dict[str, Line], today: date, holiday
         "order_qty": item.order_qty,
         "cut_qty": item.cut_qty,
         "sew_qty": item.sew_qty,
-        "pack_qty": item.pack_qty,
-        "pack_cut": item.pack_cut_override if item.pack_cut_override is not None else item.pack_cut,
+        "pack_qty": pack,
+        "tracker_pack_qty": item.pack_qty,
+        "pack_qty_manual": item.pack_qty_override is not None,
+        "pack_cut": pack_cut,
         "tracker_pack_cut": item.pack_cut,
-        "pack_cut_manual": item.pack_cut_override is not None,
+        "pack_cut_manual": item.pack_cut_override is not None or item.pack_qty_override is not None,
         "bpo_date": item.bpo_date,
         "exfty_date": item.exfty_date,
         "end_sew": effective_dates(item)[0],

@@ -113,12 +113,19 @@ def update_item(
     sent = payload.model_fields_set
     # Overriding the late result or dropping an order is Finishing's call
     # alone; Managers can still fill in WF / remark / department.
-    if sent & {"late_duration", "is_late", "removed", "end_sew", "end_pack", "pack_cut"} and current_user.role != UserRole.finishing:
+    if sent & {"late_duration", "is_late", "removed", "end_sew", "end_pack", "pack_cut", "pack_qty"} and current_user.role != UserRole.finishing:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ tài khoản Finishing được sửa Late hoặc xóa đơn",
         )
     now = local_now().replace(tzinfo=None)
+    # Editing a value makes what is computed from it follow: a hand-set
+    # result that depended on the old value is dropped (unless it is set in
+    # this same request).
+    if sent & {"end_sew", "end_pack"} and "late_duration" not in sent:
+        item.duration_override = None
+    if sent & {"end_sew", "end_pack", "late_duration", "wf"} and "is_late" not in sent:
+        item.late_override = None
     if "wf" in sent:
         item.wf = payload.wf
     if "end_sew" in sent or "end_pack" in sent:
@@ -130,8 +137,22 @@ def update_item(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="End Pack không được trước End Sew")
         item.end_sew_override = new_sew
         item.end_pack_override = new_pack
-    if "pack_cut" in sent:
-        item.pack_cut_override = payload.pack_cut
+    if "pack_qty" in sent:
+        # Pack-Cut is then Pack - Cut (close_order.effective_pack).
+        item.pack_qty_override = payload.pack_qty
+        item.pack_cut_override = None
+    elif "pack_cut" in sent:
+        if payload.pack_cut is None:
+            item.pack_qty_override = None
+            item.pack_cut_override = None
+        elif item.cut_qty is not None:
+            # Pack follows: Pack = Cut + Pack-Cut.
+            if item.cut_qty + payload.pack_cut < 0:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pack-Cut làm Pack bị âm")
+            item.pack_qty_override = item.cut_qty + payload.pack_cut
+            item.pack_cut_override = None
+        else:
+            item.pack_cut_override = payload.pack_cut
     if "late_duration" in sent:
         item.duration_override = payload.late_duration
     if "is_late" in sent:
